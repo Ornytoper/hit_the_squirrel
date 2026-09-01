@@ -1,0 +1,256 @@
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url("assets/fonts/nunito-800-cyrillic.woff2") format("woff2");
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url("assets/fonts/nunito-800-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: "Rubik";
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url("assets/fonts/rubik-800-latin.woff2") format("woff2");
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: "Nunito", "Segoe UI", sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+
+#game-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#stage {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    flex-shrink: 0;
+    overflow: hidden;
+    transform-origin: center center;
+}
+
+#background {
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    z-index: 0;
+}
+
+#score-panel {
+    position: absolute;
+    left: 37px;
+    top: 0;
+    z-index: 100;
+    color: #fff;
+    font-family: "Nunito", "Segoe UI", sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+    pointer-events: none;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
+    -webkit-font-smoothing: antialiased;
+}
+
+.score-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 64px;
+}
+
+.score-label {
+    color: #fff;
+    font-family: "Nunito", "Segoe UI", sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+#score-value,
+#high-score-value {
+    color: #fff;
+    font-family: "Rubik", "Nunito", sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+#holes-container {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+}
+
+.hole {
+    position: absolute;
+    width: 300px;
+    height: 300px;
+}
+
+.hole[data-index="0"] {
+    left: 196.6px;
+    top: 268.8px;
+}
+
+.hole[data-index="1"] {
+    left: 490px;
+    top: 400.7px;
+}
+
+.hole[data-index="2"] {
+    left: 744.02px;
+    top: 210px;
+}
+
+.hole-image {
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.squirrel-mask {
+    position: absolute;
+    left: 0;
+    top: -85.2px;
+    width: 300px;
+    height: 300px;
+    z-index: 3;
+    overflow: hidden;
+}
+
+.squirrel-img {
+    position: absolute;
+    left: 70.03px;
+    top: 85.75px;
+    width: 181.5px;
+    height: 214.5px;
+    transform: translateY(170px);
+    pointer-events: auto;
+    background-repeat: no-repeat;
+}
+
+.squirrel-img.is-hidden {
+    pointer-events: none;
+}
+
+#hammer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 170px;
+    height: 184px;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transform-origin: 75% 100%;
+    background-repeat: no-repeat;
+}
+
+#particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999;
+    overflow: hidden;
+}
+
+.hit-star {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    margin-top: -9px;
+    background: #fff8c8;
+    clip-path: polygon(
+        50% 0%,
+        61% 35%,
+        98% 35%,
+        68% 57%,
+        79% 91%,
+        50% 70%,
+        21% 91%,
+        32% 57%,
+        2% 35%,
+        39% 35%
+    );
+    filter: drop-shadow(0 0 3px #ffe56a);
+    animation: starBurst 0.45s ease-out forwards;
+}
+
+@keyframes starBurst {
+    0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1) rotate(0deg);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(120deg);
+    }
+}
+
+body.portrait #stage {
+    width: 720px;
+    height: 1280px;
+}
+
+body.portrait #score-panel {
+    left: 28px;
+    top: 36px;
+}
+
+body.portrait .score-row {
+    height: 84px;
+}
+
+body.portrait .score-label,
+body.portrait #score-value,
+body.portrait #high-score-value {
+    font-size: 48px;
+}
+
+body.portrait .hole[data-index="0"] {
+    left: 2%;
+    top: 34%;
+}
+
+body.portrait .hole[data-index="1"] {
+    left: 29%;
+    top: 54%;
+}
+
+body.portrait .hole[data-index="2"] {
+    left: 56%;
+    top: 30%;
+}

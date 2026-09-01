@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Ударь белку</title>
+    <link rel="stylesheet" href="style.css?v=fonts">
+</head>
+<body>
+    <div id="game-container">
+        <div id="stage">
+            <div id="background"></div>
+            <div id="score-panel">
+                <div class="score-row">
+                    <span class="score-label">Текущие очки:</span>
+                    <span id="score-value">0</span>
+                </div>
+                <div class="score-row">
+                    <span class="score-label">Рекорд:</span>
+                    <span id="high-score-value">0</span>
+                </div>
+            </div>
+            <div id="holes-container">
+                <div class="hole" data-index="0">
+                    <div class="hole-image"></div>
+                    <div class="squirrel-mask">
+                        <div class="squirrel-img"></div>
+                    </div>
+                </div>
+                <div class="hole" data-index="1">
+                    <div class="hole-image"></div>
+                    <div class="squirrel-mask">
+                        <div class="squirrel-img"></div>
+                    </div>
+                </div>
+                <div class="hole" data-index="2">
+                    <div class="hole-image"></div>
+                    <div class="squirrel-mask">
+                        <div class="squirrel-img"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="hammer"></div>
+            <div id="particles"></div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>

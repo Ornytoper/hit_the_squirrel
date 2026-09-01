@@ -1,0 +1,129 @@
+{
+  "size": 2048,
+  "atlases": [
+    "assets/atlases/atlas-0.webp",
+    "assets/atlases/atlas-1.webp",
+    "assets/atlases/atlas-2.webp"
+  ],
+  "frames": {
+    "HitTheSquirrelMiniGame_Bg": {
+      "atlas": 0,
+      "x": 0,
+      "y": 0,
+      "w": 1536,
+      "h": 1024
+    },
+    "aftershock-1": {
+      "atlas": 0,
+      "x": 0,
+      "y": 1026,
+      "w": 550,
+      "h": 650
+    },
+    "aftershock-2": {
+      "atlas": 0,
+      "x": 552,
+      "y": 1026,
+      "w": 550,
+      "h": 650
+    },
+    "aftershock-3": {
+      "atlas": 0,
+      "x": 1104,
+      "y": 1026,
+      "w": 550,
+      "h": 650
+    },
+    "HammerSquirrelMiniGame": {
+      "atlas": 0,
+      "x": 1656,
+      "y": 1026,
+      "w": 368,
+      "h": 500
+    },
+    "HitTheSquirrelMiniGame_Hole": {
+      "atlas": 1,
+      "x": 0,
+      "y": 0,
+      "w": 1536,
+      "h": 1024
+    },
+    "aftershock-4": {
+      "atlas": 1,
+      "x": 0,
+      "y": 1026,
+      "w": 550,
+      "h": 650
+    },
+    "idle-1": {
+      "atlas": 1,
+      "x": 552,
+      "y": 1026,
+      "w": 550,
+      "h": 650
+    },
+    "idle-2": {
+      "atlas": 1,
+      "x": 1104,
+      "y": 1026,
+      "w": 550,
+      "h": 650
+    },
+    "idle-3": {
+      "atlas": 2,
+      "x": 0,
+      "y": 0,
+      "w": 550,
+      "h": 650
+    },
+    "idle-4": {
+      "atlas": 2,
+      "x": 552,
+      "y": 0,
+      "w": 550,
+      "h": 650
+    },
+    "punch-1": {
+      "atlas": 2,
+      "x": 1104,
+      "y": 0,
+      "w": 550,
+      "h": 650
+    },
+    "punch-2": {
+      "atlas": 2,
+      "x": 0,
+      "y": 652,
+      "w": 550,
+      "h": 650
+    },
+    "punch-3": {
+      "atlas": 2,
+      "x": 552,
+      "y": 652,
+      "w": 550,
+      "h": 650
+    },
+    "punch-4": {
+      "atlas": 2,
+      "x": 1104,
+      "y": 652,
+      "w": 550,
+      "h": 650
+    },
+    "staticSquirrel": {
+      "atlas": 2,
+      "x": 0,
+      "y": 1304,
+      "w": 550,
+      "h": 650
+    },
+    "MaskHoleShir": {
+      "atlas": 2,
+      "x": 552,
+      "y": 1304,
+      "w": 600,
+      "h": 500
+    }
+  }
+}
