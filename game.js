@@ -28,7 +28,6 @@ const Atlas = {
     ],
     frames: null,
     images: [],
-    maskUrls: {},
     async load() {
         if (!this.frames) {
             const response = await fetch('assets/atlases/atlas.json');
@@ -43,7 +42,6 @@ const Atlas = {
             img.onerror = reject;
             img.src = src;
         })));
-        this.maskUrls.MaskHoleShir = await this._cropFrame('MaskHoleShir');
     },
     _cropFrame(name) {
         const frame = this.frames[name];
@@ -106,22 +104,6 @@ const Atlas = {
             const insetLeft = Math.max(0, posX);
             el.style.clipPath = `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`;
         }
-    },
-    paintMask(el, name) {
-        const url = this.maskUrls[name];
-        if (!el || !url) return;
-
-        el.style.webkitMaskImage = `url("${url}")`;
-        el.style.maskImage = `url("${url}")`;
-        el.style.webkitMaskRepeat = 'no-repeat';
-        el.style.maskRepeat = 'no-repeat';
-        el.style.webkitMaskSize = 'contain';
-        el.style.maskSize = 'contain';
-        el.style.webkitMaskPosition = 'center';
-        el.style.maskPosition = 'center';
-        el.style.webkitMaskMode = 'alpha';
-        el.style.maskMode = 'alpha';
-        el.style.clipPath = 'none';
     }
 };
 
@@ -592,12 +574,6 @@ class HitTheSquirrelGame {
         const bgFit = this.isPortrait ? 'cover-y40' : 'fill';
         Atlas.paint(document.getElementById('background'), 'HitTheSquirrelMiniGame_Bg', bgFit);
         Atlas.paint(document.getElementById('hammer'), 'HammerSquirrelMiniGame', 'contain-bottom');
-        document.querySelectorAll('.hole-image').forEach(el => {
-            Atlas.paint(el, 'HitTheSquirrelMiniGame_Hole', 'contain');
-        });
-        document.querySelectorAll('.squirrel-mask').forEach(el => {
-            Atlas.paintMask(el, 'MaskHoleShir');
-        });
     }
 
     _initSquirrels() {
