@@ -148,14 +148,6 @@ html, body {
     height: 300px;
     z-index: 3;
     overflow: hidden;
-    -webkit-mask-image: url('assets/textures/MaskHoleShir.png');
-    mask-image: url('assets/textures/MaskHoleShir.png');
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    mask-position: center;
 }
 
 .squirrel-img {
@@ -196,38 +188,11 @@ html, body {
     overflow: hidden;
 }
 
-.hit-star {
+#particles-canvas {
     position: absolute;
-    width: 18px;
-    height: 18px;
-    margin-left: -9px;
-    margin-top: -9px;
-    background: #fff8c8;
-    clip-path: polygon(
-        50% 0%,
-        61% 35%,
-        98% 35%,
-        68% 57%,
-        79% 91%,
-        50% 70%,
-        21% 91%,
-        32% 57%,
-        2% 35%,
-        39% 35%
-    );
-    filter: drop-shadow(0 0 3px #ffe56a);
-    animation: starBurst 0.45s ease-out forwards;
-}
-
-@keyframes starBurst {
-    0% {
-        opacity: 1;
-        transform: translate(0, 0) scale(1) rotate(0deg);
-    }
-    100% {
-        opacity: 0;
-        transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(120deg);
-    }
+    inset: 0;
+    width: 100%;
+    height: 100%;
 }
 
 body.portrait #stage {

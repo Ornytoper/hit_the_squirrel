@@ -360,6 +360,7 @@ class SquirrelPlayer {
     playAnimation(frames, yoyo, onComplete) {
         this._stopAnim();
         if (!frames || frames.length === 0) return;
+        if (!this._frameCache) this._frameCache = {};
 
         const sequence = yoyo
             ? frames.concat(frames.slice().reverse())
@@ -371,7 +372,30 @@ class SquirrelPlayer {
 
         const showFrame = () => {
             if (cancelled) return;
-            Atlas.paint(this.sprite, sequence[frameIndex], 'fill');
+            const key = sequence[frameIndex];
+            let style = this._frameCache[key];
+            if (!style) {
+                const frame = Atlas.frames[key];
+                if (frame) {
+                    const cw = this.sprite.clientWidth;
+                    const ch = this.sprite.clientHeight;
+                    const sx = cw / frame.w;
+                    const sy = ch / frame.h;
+                    style = {
+                        size: `${Atlas.size * sx}px ${Atlas.size * sy}px`,
+                        pos: `${-frame.x * sx}px ${-frame.y * sy}px`,
+                        url: Atlas.urls[frame.atlas]
+                    };
+                    this._frameCache[key] = style;
+                }
+            }
+            if (style) {
+                if (this.sprite.style.backgroundImage !== `url("${style.url}")`) {
+                    this.sprite.style.backgroundImage = `url("${style.url}")`;
+                }
+                this.sprite.style.backgroundSize = style.size;
+                this.sprite.style.backgroundPosition = style.pos;
+            }
             frameIndex += 1;
             timeoutId = setTimeout(() => {
                 if (cancelled) return;
@@ -440,9 +464,28 @@ class HammerPlayer {
     constructor(stage, particlesRoot) {
         this.element = document.getElementById('hammer');
         this.particlesRoot = particlesRoot;
+        this.canvas = particlesRoot.querySelector('#particles-canvas');
+        this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+        this.stars = [];
+        this.rafId = 0;
         this.stage = stage;
         this.animCancel = null;
         this.resetHammer();
+        this._resizeCanvas();
+        if (window.ResizeObserver && this.canvas) {
+            this._ro = new ResizeObserver(() => this._resizeCanvas());
+            this._ro.observe(particlesRoot);
+        }
+    }
+
+    _resizeCanvas() {
+        if (!this.canvas || !this.stage) return;
+        const w = this.stage.clientWidth;
+        const h = this.stage.clientHeight;
+        if (this.canvas.width !== w || this.canvas.height !== h) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+        }
     }
 
     playHitAtStagePosition(x, y) {
@@ -471,28 +514,64 @@ class HammerPlayer {
     }
 
     _spawnStars(x, y) {
-        while (this.particlesRoot.childElementCount > 14) {
-            this.particlesRoot.firstElementChild.remove();
-        }
+        if (!this.ctx) return;
 
         for (let i = 0; i < 7; i++) {
-            const star = document.createElement('div');
-            star.className = 'hit-star';
-            star.style.left = `${x}px`;
-            star.style.top = `${y}px`;
-
             const angle = (Math.PI * 2 * i) / 7 + Math.random() * 0.4;
             const distance = 40 + Math.random() * 50;
-            star.style.setProperty('--tx', `${Math.cos(angle) * distance}px`);
-            star.style.setProperty('--ty', `${Math.sin(angle) * distance}px`);
-            star.style.width = `${16 + Math.random() * 8}px`;
-            star.style.height = star.style.width;
-
-            this.particlesRoot.appendChild(star);
-            const cleanup = () => star.remove();
-            star.addEventListener('animationend', cleanup, { once: true });
-            setTimeout(cleanup, 600);
+            this.stars.push({
+                x, y,
+                vx: Math.cos(angle) * distance,
+                vy: Math.sin(angle) * distance,
+                size: 16 + Math.random() * 8,
+                born: performance.now()
+            });
         }
+
+        if (!this.rafId) this._tick();
+    }
+
+    _tick() {
+        this.rafId = requestAnimationFrame(() => {
+            const now = performance.now();
+            const ctx = this.ctx;
+            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+            this.stars = this.stars.filter(star => {
+                const age = (now - star.born) / 450;
+                if (age >= 1) return false;
+
+                const t = 1 - Math.pow(1 - age, 2);
+                const cx = star.x + star.vx * t;
+                const cy = star.y + star.vy * t;
+                const scale = 1 - age * 0.8;
+                const rot = age * 2.1;
+                const s = star.size * scale;
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(rot);
+                ctx.globalAlpha = 1 - age;
+                ctx.fillStyle = '#fff8c8';
+                ctx.shadowColor = '#ffe56a';
+                ctx.shadowBlur = 3;
+                ctx.beginPath();
+                const pts = [[0,-0.5],[0.11,-0.15],[0.48,-0.15],[0.18,0.07],[0.29,0.41],[0,0.2],[-0.29,0.41],[-0.18,0.07],[-0.48,-0.15],[-0.11,-0.15]];
+                ctx.moveTo(pts[0][0]*s, pts[0][1]*s);
+                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0]*s, pts[i][1]*s);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+                return true;
+            });
+
+            if (this.stars.length > 0) {
+                this._tick();
+            } else {
+                this.rafId = 0;
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+        });
     }
 
     _stopAnim() {
