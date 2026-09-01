@@ -43,7 +43,7 @@ const Atlas = {
             img.onerror = reject;
             img.src = src;
         })));
-        this.maskUrls.MaskHoleShir = this._cropFrame('MaskHoleShir');
+        this.maskUrls.MaskHoleShir = await this._cropFrame('MaskHoleShir');
     },
     _cropFrame(name) {
         const frame = this.frames[name];
@@ -52,7 +52,15 @@ const Atlas = {
         canvas.height = frame.h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(this.images[frame.atlas], -frame.x, -frame.y);
-        return canvas.toDataURL('image/png');
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(blob => {
+                if (!blob) {
+                    reject(new Error(`Failed to crop atlas frame ${name}`));
+                    return;
+                }
+                resolve(URL.createObjectURL(blob));
+            }, 'image/png');
+        });
     },
     paint(el, name, fit) {
         const frame = this.frames[name];
@@ -63,7 +71,10 @@ const Atlas = {
         const ch = el.clientHeight;
         if (cw <= 0 || ch <= 0) return;
 
-        el.style.backgroundImage = `url("${url}")`;
+        if (el.dataset.atlasUrl !== url) {
+            el.dataset.atlasUrl = url;
+            el.style.backgroundImage = `url("${url}")`;
+        }
         el.style.backgroundRepeat = 'no-repeat';
         el.style.clipPath = 'none';
 
@@ -97,37 +108,20 @@ const Atlas = {
         }
     },
     paintMask(el, name) {
-        const frame = this.frames[name];
-        if (!el || !frame) return;
-
-        const url = this.urls[frame.atlas];
-        const cw = el.clientWidth;
-        const ch = el.clientHeight;
-        if (cw <= 0 || ch <= 0) return;
-
-        const scale = Math.min(cw / frame.w, ch / frame.h);
-        const dw = frame.w * scale;
-        const dh = frame.h * scale;
-        const posX = (cw - dw) / 2;
-        const posY = (ch - dh) / 2;
-        const sizeCss = `${this.size * scale}px ${this.size * scale}px`;
-        const posCss = `${posX - frame.x * scale}px ${posY - frame.y * scale}px`;
+        const url = this.maskUrls[name];
+        if (!el || !url) return;
 
         el.style.webkitMaskImage = `url("${url}")`;
         el.style.maskImage = `url("${url}")`;
         el.style.webkitMaskRepeat = 'no-repeat';
         el.style.maskRepeat = 'no-repeat';
-        el.style.webkitMaskSize = sizeCss;
-        el.style.maskSize = sizeCss;
-        el.style.webkitMaskPosition = posCss;
-        el.style.maskPosition = posCss;
+        el.style.webkitMaskSize = 'contain';
+        el.style.maskSize = 'contain';
+        el.style.webkitMaskPosition = 'center';
+        el.style.maskPosition = 'center';
+        el.style.webkitMaskMode = 'alpha';
         el.style.maskMode = 'alpha';
-
-        const insetTop = Math.max(0, posY);
-        const insetRight = Math.max(0, cw - posX - dw);
-        const insetBottom = Math.max(0, ch - posY - dh);
-        const insetLeft = Math.max(0, posX);
-        el.style.clipPath = `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`;
+        el.style.clipPath = 'none';
     }
 };
 
@@ -217,29 +211,42 @@ function tween(duration, onUpdate, onComplete) {
 
 class AudioManager {
     constructor() {
-        this.audioCache = {};
         this.lastIndex = {};
         this.musicAudio = null;
         this.unlocked = false;
+        this.ctx = null;
+        this.buffers = {};
+        this.ext = this._pickExt();
     }
 
-    preload() {
-        const allSounds = Object.values(SOUNDS).flatMap(entry => entry.srcs);
-        allSounds.forEach(src => {
-            const audio = new Audio(src);
-            audio.preload = 'auto';
-            audio.load();
-            this.audioCache[src] = audio;
-        });
+    _pickExt() {
+        const probe = document.createElement('audio');
+        if (probe.canPlayType('audio/mp4; codecs="mp4a.40.2"')) return 'm4a';
+        if (probe.canPlayType('audio/mpeg')) return 'mp3';
+        return 'ogg';
     }
+
+    _src(path) {
+        return this.ext === 'ogg' ? path : path.replace(/\.ogg$/i, `.${this.ext}`);
+    }
+
+    preload() {}
 
     unlock() {
         if (this.unlocked) return;
         this.unlocked = true;
+
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) {
+            this.ctx = new Ctx();
+            this.ctx.resume().catch(() => {});
+        }
+
         this.playMusic();
     }
 
     play(name) {
+        if (!this.unlocked) return;
         const entry = SOUNDS[name];
         if (!entry) return;
 
@@ -258,18 +265,21 @@ class AudioManager {
         }
 
         this.lastIndex[name] = index;
-        this._playSound(srcs[index]);
+        this._playSound(this._src(srcs[index]));
     }
 
     playMusic() {
+        if (!this.unlocked) return;
+
         if (this.musicAudio) {
             this.musicAudio.play().catch(() => {});
             return;
         }
 
-        this.musicAudio = new Audio(SOUNDS.music.srcs[0]);
+        this.musicAudio = new Audio(this._src(SOUNDS.music.srcs[0]));
         this.musicAudio.loop = true;
         this.musicAudio.volume = 1;
+        this.musicAudio.playsInline = true;
         this.musicAudio.play().catch(() => {});
     }
 
@@ -280,10 +290,53 @@ class AudioManager {
     }
 
     _playSound(src) {
-        const audio = this.audioCache[src] || new Audio(src);
-        const clone = audio.cloneNode();
-        clone.volume = 1;
-        clone.play().catch(() => {});
+        if (this.ctx) {
+            this._playBuffer(src);
+            return;
+        }
+
+        const audio = new Audio(src);
+        audio.volume = 1;
+        audio.playsInline = true;
+        audio.play().catch(() => {});
+        audio.addEventListener('ended', () => {
+            audio.src = '';
+        }, { once: true });
+    }
+
+    _playBuffer(src) {
+        const start = buffer => {
+            if (!this.ctx || this.ctx.state === 'closed') return;
+            if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+            const node = this.ctx.createBufferSource();
+            node.buffer = buffer;
+            node.connect(this.ctx.destination);
+            node.start(0);
+        };
+
+        const cached = this.buffers[src];
+        if (cached) {
+            start(cached);
+            return;
+        }
+
+        fetch(src)
+            .then(response => response.arrayBuffer())
+            .then(data => this._decode(data))
+            .then(buffer => {
+                this.buffers[src] = buffer;
+                start(buffer);
+            })
+            .catch(() => {});
+    }
+
+    _decode(data) {
+        const copy = data.slice(0);
+        const result = this.ctx.decodeAudioData(copy);
+        if (result && typeof result.then === 'function') return result;
+        return new Promise((resolve, reject) => {
+            this.ctx.decodeAudioData(data.slice(0), resolve, reject);
+        });
     }
 }
 
@@ -436,6 +489,10 @@ class HammerPlayer {
     }
 
     _spawnStars(x, y) {
+        while (this.particlesRoot.childElementCount > 14) {
+            this.particlesRoot.firstElementChild.remove();
+        }
+
         for (let i = 0; i < 7; i++) {
             const star = document.createElement('div');
             star.className = 'hit-star';
@@ -450,7 +507,9 @@ class HammerPlayer {
             star.style.height = star.style.width;
 
             this.particlesRoot.appendChild(star);
-            setTimeout(() => star.remove(), 500);
+            const cleanup = () => star.remove();
+            star.addEventListener('animationend', cleanup, { once: true });
+            setTimeout(cleanup, 600);
         }
     }
 
@@ -520,6 +579,7 @@ class HitTheSquirrelGame {
         this.stageWidth = LANDSCAPE_STAGE.width;
         this.stageHeight = LANDSCAPE_STAGE.height;
         this.isPortrait = false;
+        this._artKey = '';
 
         this._initSquirrels();
         this._bindEvents();
@@ -560,19 +620,21 @@ class HitTheSquirrelGame {
             this.stage.style.width = `${this.stageWidth}px`;
             this.stage.style.height = `${this.stageHeight}px`;
             this.stage.style.transform = `scale(${scale})`;
-            this._applyWorldArt();
-            return;
+        } else {
+            this.stageWidth = LANDSCAPE_STAGE.width;
+            this.stageHeight = LANDSCAPE_STAGE.height;
+            this.stage.style.width = `${this.stageWidth}px`;
+            this.stage.style.height = `${this.stageHeight}px`;
+            const scale = Math.min(
+                window.innerWidth / this.stageWidth,
+                window.innerHeight / this.stageHeight
+            );
+            this.stage.style.transform = `scale(${scale})`;
         }
 
-        this.stageWidth = LANDSCAPE_STAGE.width;
-        this.stageHeight = LANDSCAPE_STAGE.height;
-        this.stage.style.width = `${this.stageWidth}px`;
-        this.stage.style.height = `${this.stageHeight}px`;
-        const scale = Math.min(
-            window.innerWidth / this.stageWidth,
-            window.innerHeight / this.stageHeight
-        );
-        this.stage.style.transform = `scale(${scale})`;
+        const artKey = `${this.isPortrait}|${this.stageWidth}|${this.stageHeight}`;
+        if (this._artKey === artKey) return;
+        this._artKey = artKey;
         this._applyWorldArt();
     }
 
@@ -587,13 +649,20 @@ class HitTheSquirrelGame {
     }
 
     _bindEvents() {
-        window.addEventListener('resize', () => this._fitStage());
+        const fit = () => this._fitStage();
+        let fitTimer = 0;
+        const fitDebounced = () => {
+            clearTimeout(fitTimer);
+            fitTimer = setTimeout(fit, 80);
+        };
+
+        window.addEventListener('resize', fitDebounced);
         window.addEventListener('orientationchange', () => {
-            this._fitStage();
-            setTimeout(() => this._fitStage(), 200);
+            fit();
+            setTimeout(fit, 200);
         });
         if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', () => this._fitStage());
+            window.visualViewport.addEventListener('resize', fitDebounced);
         }
 
         const pointFromEvent = (event) => {
@@ -716,7 +785,6 @@ class HitTheSquirrelGame {
     start() {
         this.isPlaying = true;
         this.scoreManager.reset();
-        this.audioManager.playMusic();
         this.playGame();
     }
 }

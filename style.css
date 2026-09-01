@@ -159,6 +159,7 @@ html, body {
     transform: translateY(170px);
     pointer-events: auto;
     background-repeat: no-repeat;
+    will-change: transform;
 }
 
 .squirrel-img.is-hidden {
@@ -176,6 +177,7 @@ html, body {
     opacity: 0;
     transform-origin: 75% 100%;
     background-repeat: no-repeat;
+    will-change: transform;
 }
 
 #particles {
