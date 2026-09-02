@@ -4,12 +4,60 @@ const HIDE_AFTER_CATCH_DELAY = 0.28;
 const FRAME_DURATION = 0.05;
 const MOVE_DURATION = 0.3;
 const MOVE_OFFSET_Y = 170;
-const HIGH_SCORE_KEY = 'helpSquirrelMiniGameHighScore';
+const HIGH_SCORE_PREFIX = 'helpSquirrelMiniGameHighScore';
+const HIGH_SCORE_LEGACY_KEY = 'helpSquirrelMiniGameHighScore';
 const QUERY = Object.fromEntries(new URLSearchParams(location.search).entries());
-const ROUND_DURATION = Math.max(8, Number(QUERY.round) || 25);
-const STASH_GOAL = Math.max(1, Number(QUERY.goal) || 12);
-const WAVE2_AT = ROUND_DURATION * 0.32;
-const WAVE3_AT = ROUND_DURATION * 0.64;
+const MODES = {
+    warmup: {
+        id: 'warmup',
+        title: 'Разминка',
+        duration: 25,
+        goal: 10,
+        tapWhileRising: true,
+        move: 0.26,
+        catchHide: 0.24,
+        counts: [
+            { at: 0, n: 1 }
+        ],
+        hide: [
+            { at: 0, min: 0.3, max: 0.5 }
+        ]
+    },
+    luck: {
+        id: 'luck',
+        title: 'Удача',
+        duration: 22,
+        goal: 16,
+        tapWhileRising: false,
+        move: 0.2,
+        catchHide: 0.18,
+        counts: [
+            { at: 0, n: 1 },
+            { at: 0.25, n: 2 },
+            { at: 0.6, n: 3 }
+        ],
+        hide: [
+            { at: 0, min: 0.2, max: 0.5 }
+        ]
+    },
+    heat: {
+        id: 'heat',
+        title: 'Азарт',
+        duration: 20,
+        goal: 20,
+        tapWhileRising: false,
+        move: 0.15,
+        catchHide: 0.12,
+        counts: [
+            { at: 0, n: 2 },
+            { at: 0.22, n: 3 }
+        ],
+        hide: [
+            { at: 0, min: 0.1, max: 0.5 }
+        ]
+    }
+};
+const DEFAULT_MODE = MODES[QUERY.mode] || MODES.luck;
 const COIN_TOSS_DURATION = 0.18;
 const COIN_MISS_DURATION = 0.45;
 const WIN_END_DELAY = 0.55;
@@ -392,6 +440,7 @@ class SquirrelPlayer {
         this.appearanceToken = 0;
         this.scoredThisAppearance = false;
         this.hideTimer = null;
+        this.hideDelay = 0;
         this._setOffset(MOVE_OFFSET_Y);
         this._syncHitbox();
     }
@@ -515,13 +564,13 @@ class SquirrelPlayer {
         this.sprite.style.backgroundPosition = style.pos;
     }
 
-    move(isUp, onComplete) {
+    move(isUp, onComplete, duration) {
         this._stopMove();
 
         const from = this.offsetY;
         const to = isUp ? 0 : MOVE_OFFSET_Y;
 
-        this.moveCancel = tween(MOVE_DURATION, t => {
+        this.moveCancel = tween(duration ?? MOVE_DURATION, t => {
             this._setOffset(from + (to - from) * t);
         }, () => {
             this.moveCancel = null;
@@ -723,7 +772,10 @@ class ScoreManager {
         this.stash = 0;
         this.combo = 0;
         this.bestCombo = 0;
-        this.highScore = this._loadHighScore();
+        this.goal = DEFAULT_MODE.goal;
+        this.modeId = DEFAULT_MODE.id;
+        this.highScores = this._loadAll();
+        this.highScore = this.highScores[this.modeId] || 0;
         this.stashFill = document.getElementById('stash-fill');
         this.stashValue = document.getElementById('stash-value');
         this.highScoreElement = document.getElementById('high-score-value');
@@ -731,6 +783,15 @@ class ScoreManager {
         this.highScoreElement.textContent = this.highScore;
         this._render();
         window.addEventListener('pagehide', () => this.persist());
+    }
+
+    setMode(mode) {
+        this.persist();
+        this.modeId = mode.id;
+        this.goal = mode.goal;
+        this.highScore = this.highScores[mode.id] || 0;
+        this.highScoreElement.textContent = this.highScore;
+        this._render();
     }
 
     multiplier() {
@@ -746,6 +807,7 @@ class ScoreManager {
         this.stash += gained;
         if (this.stash > this.highScore) {
             this.highScore = this.stash;
+            this.highScores[this.modeId] = this.highScore;
             this.highScoreElement.textContent = this.highScore;
         }
         this._render();
@@ -766,13 +828,14 @@ class ScoreManager {
     }
 
     persist() {
-        localStorage.setItem(HIGH_SCORE_KEY, String(this.highScore));
+        this.highScores[this.modeId] = this.highScore;
+        localStorage.setItem(`${HIGH_SCORE_PREFIX}.${this.modeId}`, String(this.highScore));
     }
 
     _render() {
-        const ratio = Math.min(1, this.stash / STASH_GOAL);
+        const ratio = Math.min(1, this.stash / this.goal);
         this.stashFill.style.width = `${ratio * 100}%`;
-        this.stashValue.textContent = `${this.stash}/${STASH_GOAL}`;
+        this.stashValue.textContent = `${this.stash}/${this.goal}`;
         const mult = this.multiplier();
         if (this.combo >= 3) {
             this.comboBanner.hidden = false;
@@ -782,9 +845,17 @@ class ScoreManager {
         }
     }
 
-    _loadHighScore() {
-        const current = parseInt(localStorage.getItem(HIGH_SCORE_KEY), 10);
-        return Number.isNaN(current) ? 0 : current;
+    _loadAll() {
+        const scores = {};
+        Object.keys(MODES).forEach(id => {
+            const value = parseInt(localStorage.getItem(`${HIGH_SCORE_PREFIX}.${id}`), 10);
+            scores[id] = Number.isNaN(value) ? 0 : value;
+        });
+        if (!scores.luck) {
+            const legacy = parseInt(localStorage.getItem(HIGH_SCORE_LEGACY_KEY), 10);
+            if (!Number.isNaN(legacy)) scores.luck = legacy;
+        }
+        return scores;
     }
 }
 
@@ -792,11 +863,20 @@ class HelpTheSquirrelGame {
     constructor() {
         this.stage = document.getElementById('stage');
         this.overlay = document.getElementById('overlay');
+        this.menuCard = document.getElementById('menu-card');
+        this.rulesCard = document.getElementById('rules-card');
         this.overlayTitle = document.getElementById('overlay-title');
         this.overlayText = document.getElementById('overlay-text');
         this.overlayStats = document.getElementById('overlay-stats');
+        this.modeHint = document.getElementById('mode-hint');
         this.playButton = document.getElementById('play-button');
+        this.rulesButton = document.getElementById('rules-button');
+        this.rulesBack = document.getElementById('rules-back');
         this.timerValue = document.getElementById('timer-value');
+        this.mode = DEFAULT_MODE;
+        this.paused = false;
+        this.pauseStarted = 0;
+        this.rulesFromPlay = false;
         this.audioManager = new AudioManager();
         this.coins = new CoinFx(
             this.stage,
@@ -808,6 +888,7 @@ class HelpTheSquirrelGame {
         this.active = new Set();
         this.hiding = new Set();
         this.appearanceSeq = 0;
+        this.nextSpawnAt = 0;
         this.isPlaying = false;
         this.roundClosing = false;
         this.roundStart = 0;
@@ -821,7 +902,7 @@ class HelpTheSquirrelGame {
         this._initSquirrels();
         this._bindEvents();
         this._fitStage();
-        this._setTimer(ROUND_DURATION);
+        this._applyMode(this.mode, false);
         this.audioManager.preload();
     }
 
@@ -906,7 +987,7 @@ class HelpTheSquirrelGame {
                 event.preventDefault();
                 event.stopPropagation();
                 this.audioManager.unlock();
-                if (!this.isPlaying || this.roundClosing) return;
+                if (!this.isPlaying || this.roundClosing || this.paused) return;
                 if (!this.active.has(squirrel) || !squirrel.interactable) return;
                 const { x, y } = pointFromEvent(event);
                 this._onGiveCoin(squirrel, x, y);
@@ -914,10 +995,10 @@ class HelpTheSquirrelGame {
         });
 
         this.stage.addEventListener('pointerdown', (event) => {
-            if (event.target.closest('#overlay')) return;
+            if (event.target.closest('#overlay, #rules-button')) return;
             event.preventDefault();
             this.audioManager.unlock();
-            if (!this.isPlaying || this.roundClosing) return;
+            if (!this.isPlaying || this.roundClosing || this.paused) return;
             const { x, y } = pointFromEvent(event);
             this._onMiss(x, y);
         });
@@ -928,21 +1009,112 @@ class HelpTheSquirrelGame {
             this.audioManager.unlock();
             this.startRound();
         });
+
+        this.overlay.querySelectorAll('.mode-button').forEach(button => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.audioManager.unlock();
+                this._applyMode(MODES[button.dataset.mode], true);
+            });
+        });
+
+        this.rulesButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.audioManager.unlock();
+            this._openRules();
+        });
+
+        this.rulesBack.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this._closeRules();
+        });
+    }
+
+    _applyMode(mode, updateButtons) {
+        if (!mode) return;
+        this.mode = mode;
+        this.scoreManager.setMode(mode);
+        this.modeHint.textContent = `${mode.goal} монет за ${mode.duration} секунд`;
+        this._setTimer(mode.duration);
+        if (updateButtons) {
+            this.overlay.querySelectorAll('.mode-button').forEach(button => {
+                button.classList.toggle('is-selected', button.dataset.mode === mode.id);
+            });
+        }
+    }
+
+    _openRules() {
+        this.rulesFromPlay = this.isPlaying && !this.roundClosing;
+        if (this.rulesFromPlay) this._pauseRound();
+        this.menuCard.hidden = true;
+        this.rulesCard.hidden = false;
+        this.overlay.classList.remove('is-hidden');
+    }
+
+    _closeRules() {
+        this.rulesCard.hidden = true;
+        if (this.rulesFromPlay) {
+            this.overlay.classList.add('is-hidden');
+            this.menuCard.hidden = false;
+            this.rulesFromPlay = false;
+            this._resumeRound();
+            return;
+        }
+        this.menuCard.hidden = false;
+    }
+
+    _pauseRound() {
+        if (this.paused || !this.isPlaying) return;
+        this.paused = true;
+        this.pauseStarted = nowSeconds();
+        if (this.roundRaf) {
+            cancelAnimationFrame(this.roundRaf);
+            this.roundRaf = 0;
+        }
+        this.squirrels.forEach(squirrel => {
+            if (!squirrel.hideTimer) return;
+            squirrel.hidePausedRemain = Math.max(0, squirrel.hideDeadline - nowSeconds());
+            this._cancelHideTimer(squirrel);
+        });
+    }
+
+    _resumeRound() {
+        if (!this.paused) return;
+        const pauseDt = nowSeconds() - this.pauseStarted;
+        this.roundStart += pauseDt;
+        if (this.nextSpawnAt) this.nextSpawnAt += pauseDt;
+        this.paused = false;
+        this.squirrels.forEach(squirrel => {
+            if (squirrel.hidePausedRemain == null) return;
+            this._startHideTimer(squirrel, squirrel.appearanceToken, squirrel.hidePausedRemain);
+            squirrel.hidePausedRemain = null;
+        });
+        this.roundRaf = requestAnimationFrame(() => this._tickRound());
     }
 
     _elapsed() {
         return nowSeconds() - this.roundStart;
     }
 
+    _progressStep(list) {
+        const progress = this._elapsed() / this.mode.duration;
+        let step = list[0];
+        list.forEach(entry => {
+            if (progress >= entry.at) step = entry;
+        });
+        return step;
+    }
+
     _desiredCount() {
-        return this._elapsed() >= WAVE3_AT ? 2 : 1;
+        return this._progressStep(this.mode.counts).n;
     }
 
     _hideDelay() {
-        const t = this._elapsed();
-        if (t >= WAVE3_AT) return 0.12 + Math.random() * 0.18;
-        if (t >= WAVE2_AT) return 0.22 + Math.random() * 0.22;
-        return 0.65 + Math.random() * 0.45;
+        const step = this._progressStep(this.mode.hide);
+        return step.min + Math.random() * (step.max - step.min);
     }
 
     _setTimer(secondsLeft) {
@@ -983,14 +1155,14 @@ class HelpTheSquirrelGame {
         const gained = this.scoreManager.addCatch();
         this.coins.floatText(target.x - 18, target.y - 24, `+${gained}`);
 
-        if (this.scoreManager.stash >= STASH_GOAL) {
+        if (this.scoreManager.stash >= this.mode.goal) {
             this._scheduleEnd(true);
         }
 
         squirrel.playPunch(false, () => {
             if (squirrel.appearanceToken !== token) return;
             this.audioManager.play('stars');
-            this._startHideTimer(squirrel, token, HIDE_AFTER_CATCH_DELAY);
+            this._startHideTimer(squirrel, token, this.mode.catchHide);
         });
     }
 
@@ -1004,11 +1176,15 @@ class HelpTheSquirrelGame {
     }
 
     _fillSpawns() {
-        if (!this.isPlaying || this.roundClosing) return;
+        if (!this.isPlaying || this.roundClosing || this.paused) return;
         while (this.active.size < this._desiredCount()) {
+            if (nowSeconds() < this.nextSpawnAt) break;
             const squirrel = this._pickFree();
             if (!squirrel) break;
             this._appear(squirrel);
+            if (this.active.size < this._desiredCount()) {
+                this.nextSpawnAt = nowSeconds() + 0.08 + Math.random() * 0.22;
+            }
         }
     }
 
@@ -1016,19 +1192,22 @@ class HelpTheSquirrelGame {
         const token = ++this.appearanceSeq;
         squirrel.appearanceToken = token;
         squirrel.scoredThisAppearance = false;
+        squirrel.hideDelay = this._hideDelay();
         this.active.add(squirrel);
-        squirrel.setInteractable(true);
+        squirrel.setInteractable(!!this.mode.tapWhileRising);
         squirrel.playStatic();
         this.audioManager.play('show');
 
         squirrel.move(true, () => {
             if (squirrel.appearanceToken !== token) return;
-            this._startHideTimer(squirrel, token, this._hideDelay());
-        });
+            squirrel.setInteractable(true);
+            this._startHideTimer(squirrel, token, squirrel.hideDelay);
+        }, this.mode.move);
     }
 
     _startHideTimer(squirrel, token, delay) {
         this._cancelHideTimer(squirrel);
+        squirrel.hideDeadline = nowSeconds() + delay;
         squirrel.hideTimer = setTimeout(() => {
             squirrel.hideTimer = null;
             if (squirrel.appearanceToken !== token) return;
@@ -1050,7 +1229,7 @@ class HelpTheSquirrelGame {
             this.hiding.delete(squirrel);
             if (squirrel.appearanceToken !== token) return;
             this._fillSpawns();
-        });
+        }, this.mode.move);
     }
 
     _cancelHideTimer(squirrel) {
@@ -1061,15 +1240,15 @@ class HelpTheSquirrelGame {
     }
 
     _tickRound() {
-        if (!this.isPlaying) return;
-        const left = ROUND_DURATION - this._elapsed();
+        if (!this.isPlaying || this.paused) return;
+        const left = this.mode.duration - this._elapsed();
         this._setTimer(left);
         if (this.roundClosing) {
             this.roundRaf = requestAnimationFrame(() => this._tickRound());
             return;
         }
         if (left <= 0) {
-            this._endRound(this.scoreManager.stash >= STASH_GOAL);
+            this._endRound(this.scoreManager.stash >= this.mode.goal);
             return;
         }
         this._fillSpawns();
@@ -1111,11 +1290,13 @@ class HelpTheSquirrelGame {
         this.overlayTitle.textContent = won ? 'Удача поймана!' : 'Ещё попытка?';
         this.overlayText.textContent = won
             ? 'Белка спрятала весь запас'
-            : `Набери ${STASH_GOAL} монет за ${ROUND_DURATION} секунд — тапни по белке, чтобы отдать монету`;
+            : `Набери ${this.mode.goal} монет за ${this.mode.duration} секунд — тапни по белке, чтобы отдать монету`;
         this.overlayStats.hidden = false;
         this.overlayStats.innerHTML =
-            `Запас: ${this.scoreManager.stash}<br>Лучшая серия: ${this.scoreManager.bestCombo}`;
+            `${this.mode.title}<br>Запас: ${this.scoreManager.stash}<br>Лучшая серия: ${this.scoreManager.bestCombo}`;
         this.playButton.textContent = 'ЕЩЁ РАЗ';
+        this.menuCard.hidden = false;
+        this.rulesCard.hidden = true;
         this.overlay.classList.remove('is-hidden');
     }
 
@@ -1133,8 +1314,10 @@ class HelpTheSquirrelGame {
         this.roundClosing = false;
         this.roundStart = nowSeconds();
         this.appearanceSeq += 1;
+        this.nextSpawnAt = 0;
+        this.paused = false;
         this.scoreManager.reset();
-        this._setTimer(ROUND_DURATION);
+        this._setTimer(this.mode.duration);
         this.squirrels.forEach(squirrel => squirrel.resetDown());
         this.active.clear();
         this.hiding.clear();
