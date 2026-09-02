@@ -816,9 +816,13 @@ class HitTheSquirrelGame {
 
         const roundId = this.currentRoundId;
 
-        this._cancelHideTimer();
         this.hammer.playHitAtStagePosition(x, y);
 
+        // Repeated taps may show another hammer hit, but must not cancel the
+        // pending hide while the squirrel is already reacting.
+        if (currentSquirrel.isPunchPlaying || currentSquirrel.isShockPlaying) return;
+
+        this._cancelHideTimer();
         this.audioManager.play('hitTarget');
         if (Math.random() <= SCREAM_SOUND_MAX_CHANCE) {
             this.audioManager.play('scream');
