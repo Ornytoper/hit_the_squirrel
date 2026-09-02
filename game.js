@@ -15,7 +15,7 @@ const LEGACY_HIGH_SCORE_KEY = 'hitSquirrelHighScore';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edgios|android).)*safari/i.test(navigator.userAgent);
 const STAR_COUNT = IS_SAFARI ? 4 : 7;
-const SAFARI_AUDIO_POOL_SIZE = 8;
+const MAX_ACTIVE_SFX = 8;
 const DEBUG_FLAGS = Object.assign(
     { sound: true, stars: true, squirrel: true, hammer: true },
     Object.fromEntries(new URLSearchParams(location.search).entries())
@@ -209,8 +209,8 @@ class AudioManager {
         this.buffers = {};
         this.spriteMap = null;
         this.spriteReady = null;
-        this.safariPool = null;
-        this.safariSoundUrls = {};
+        this.spriteAssets = null;
+        this.activeSources = new Set();
         this.ext = this._pickExt();
     }
 
@@ -226,56 +226,22 @@ class AudioManager {
     }
 
     preload() {
-        if (IS_SAFARI) {
-            this._initSafariPool();
-            this._cacheSafariSounds();
-        }
-    }
-
-    _initSafariPool() {
-        if (this.safariPool) return;
-
-        const voices = Array.from({ length: SAFARI_AUDIO_POOL_SIZE }, () => {
-            const audio = new Audio();
-            audio.preload = 'auto';
-            audio.playsInline = true;
-            audio.addEventListener('ended', () => {
-                audio.currentTime = 0;
-            });
-            return audio;
-        });
-
-        this.safariPool = { voices, cursor: 0 };
-    }
-
-    _cacheSafariSounds() {
-        const sources = new Set(
-            Object.entries(SOUNDS)
-                .filter(([name]) => name !== 'music')
-                .flatMap(([, entry]) => entry.srcs.map(src => this._src(src)))
-        );
-
-        sources.forEach(src => {
-            fetch(src)
-                .then(response => response.blob())
-                .then(blob => {
-                    this.safariSoundUrls[src] = URL.createObjectURL(blob);
-                })
-                .catch(() => {});
-        });
+        if (this.spriteAssets) return;
+        this.spriteAssets = Promise.all([
+            fetch('assets/sounds/sprites.json').then(response => response.json()),
+            fetch('assets/sounds/sprites.m4a').then(response => response.arrayBuffer())
+        ]);
     }
 
     unlock() {
         if (this.unlocked) return;
         this.unlocked = true;
 
-        if (!IS_SAFARI) {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (Ctx) {
-                this.ctx = new Ctx();
-                this.ctx.resume().catch(() => {});
-                this._loadSprite();
-            }
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) {
+            this.ctx = new Ctx();
+            this.ctx.resume().catch(() => {});
+            this._loadSprite();
         }
 
         this.playMusic();
@@ -284,12 +250,10 @@ class AudioManager {
     _loadSprite() {
         if (this.spriteReady) return this.spriteReady;
 
-        this.spriteReady = Promise.all([
-            fetch('assets/sounds/sprites.json').then(r => r.json()),
-            fetch('assets/sounds/sprites.m4a')
-                .then(r => r.arrayBuffer())
-                .then(data => this._decode(data))
-        ]).then(([meta, buffer]) => {
+        this.preload();
+        this.spriteReady = this.spriteAssets.then(([meta, data]) => {
+            return this._decode(data).then(buffer => [meta, buffer]);
+        }).then(([meta, buffer]) => {
             this.spriteMap = {};
             meta.forEach(m => { this.spriteMap[m.name] = m; });
             this.buffers.__sprite = buffer;
@@ -318,54 +282,33 @@ class AudioManager {
         }
 
         this.lastIndex[name] = index;
-
-        if (IS_SAFARI) {
-            this._playSafariPool(this._src(srcs[index]));
-            return;
-        }
-
         const stem = srcs[index].split('/').pop().replace(/\.ogg$/i, '');
         this._playSpriteClip(stem);
     }
 
-    _playSafariPool(src) {
-        const pool = this.safariPool;
-        if (!pool) return;
-
-        for (let offset = 0; offset < pool.voices.length; offset++) {
-            const index = (pool.cursor + offset) % pool.voices.length;
-            const audio = pool.voices[index];
-            if (!audio.paused && !audio.ended) continue;
-
-            pool.cursor = (index + 1) % pool.voices.length;
-            const cachedSrc = this.safariSoundUrls[src] || src;
-            if (audio.dataset.soundSrc !== cachedSrc) {
-                audio.dataset.soundSrc = cachedSrc;
-                audio.src = cachedSrc;
-                audio.load();
-            }
-            audio.play().catch(() => {});
-            return;
-        }
-
-        // Every cached voice is still playing. Drop this sound instead of
-        // seeking an active decoder, which causes stalls in Safari.
-    }
-
     _playSpriteClip(stem) {
-        if (!this.ctx) return;
-        const play = () => {
-            const meta = this.spriteMap && this.spriteMap[stem];
-            const buffer = this.buffers.__sprite;
-            if (!meta || !buffer || this.ctx.state === 'closed') return;
-            if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-            const node = this.ctx.createBufferSource();
-            node.buffer = buffer;
-            node.connect(this.ctx.destination);
-            node.start(0, meta.start, meta.dur);
+        const meta = this.spriteMap && this.spriteMap[stem];
+        const buffer = this.buffers.__sprite;
+        if (!this.ctx || !meta || !buffer || this.ctx.state !== 'running') return;
+        if (this.activeSources.size >= MAX_ACTIVE_SFX) return;
+
+        const node = this.ctx.createBufferSource();
+        node.buffer = buffer;
+        node.connect(this.ctx.destination);
+        this.activeSources.add(node);
+
+        const release = () => {
+            node.onended = null;
+            node.disconnect();
+            this.activeSources.delete(node);
         };
-        if (this.spriteMap) play();
-        else this._loadSprite().then(play);
+        node.onended = release;
+
+        try {
+            node.start(0, meta.start, meta.dur);
+        } catch {
+            release();
+        }
     }
 
     playMusic() {
@@ -391,9 +334,6 @@ class AudioManager {
     }
 
     _decode(data) {
-        const copy = data.slice(0);
-        const result = this.ctx.decodeAudioData(copy);
-        if (result && typeof result.then === 'function') return result;
         return new Promise((resolve, reject) => {
             this.ctx.decodeAudioData(data.slice(0), resolve, reject);
         });
