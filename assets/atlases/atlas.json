@@ -1,10 +1,10 @@
 {
   "size": 2048,
-  "atlases": [
-    "assets/atlases/atlas-0.webp",
-    "assets/atlases/atlas-1.webp",
-    "assets/atlases/atlas-2.webp"
-  ],
+        "atlases": [
+                "assets/atlases/atlas-0.webp",
+                "assets/atlases/atlas-1.webp?v=joy",
+                "assets/atlases/atlas-2.webp?v=coin-bb"
+        ],
   "frames": {
     "HitTheSquirrelMiniGame_Bg": {
       "atlas": 0,

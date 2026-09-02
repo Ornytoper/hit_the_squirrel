@@ -1,3 +1,13 @@
+:root {
+    --bb-purple: #902FF2;
+    --bb-pink: #FF0090;
+    --bb-yellow: #FAD604;
+    --bb-blue: #20C4F4;
+    --bb-red: #D80000;
+    --bb-dark: #1E0041;
+    --bb-white: #FFFFFF;
+}
+
 @font-face {
     font-family: "Nunito";
     font-style: normal;
@@ -34,7 +44,7 @@ html, body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #000;
+    background: var(--bb-dark);
     font-family: "Nunito", "Segoe UI", sans-serif;
     user-select: none;
     -webkit-user-select: none;
@@ -48,6 +58,7 @@ html, body {
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    background: var(--bb-dark);
 }
 
 #stage {
@@ -68,41 +79,88 @@ html, body {
 
 #score-panel {
     position: absolute;
-    left: 37px;
-    top: 0;
-    z-index: 100;
-    color: #fff;
+    left: 28px;
+    top: 20px;
+    z-index: 1100;
+    color: var(--bb-white);
     font-family: "Nunito", "Segoe UI", sans-serif;
-    font-size: 36px;
+    font-size: 28px;
     font-weight: 800;
     line-height: 1;
     pointer-events: none;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
+    padding: 18px 26px 14px 22px;
+    border-radius: 56px 20px 20px 20px;
+    background: linear-gradient(135deg, rgba(144, 47, 242, 0.88), rgba(255, 0, 144, 0.78));
     -webkit-font-smoothing: antialiased;
 }
 
 .score-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 64px;
+    gap: 12px;
+    height: 44px;
 }
 
 .score-label {
-    color: #fff;
-    font-family: "Nunito", "Segoe UI", sans-serif;
-    font-size: 36px;
+    color: var(--bb-white);
+    font-size: 26px;
     font-weight: 800;
     letter-spacing: 0.01em;
+    min-width: 96px;
 }
 
-#score-value,
+#stash-value,
+#timer-value,
 #high-score-value {
-    color: #fff;
+    color: var(--bb-white);
     font-family: "Rubik", "Nunito", sans-serif;
-    font-size: 36px;
+    font-size: 28px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
+}
+
+.stash-track {
+    width: 168px;
+    height: 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.stash-coin-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    background: url("assets/textures/brand-coin-sm.webp?v=bb") center / contain no-repeat;
+}
+
+#stash-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: var(--bb-yellow);
+    transition: width 0.18s ease-out;
+}
+
+#timer-value.is-urgent {
+    color: var(--bb-yellow);
+}
+
+#combo-banner {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1100;
+    pointer-events: none;
+    padding: 12px 28px;
+    border-radius: 999px;
+    background: var(--bb-pink);
+    color: var(--bb-white);
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
 }
 
 #holes-container {
@@ -166,7 +224,7 @@ html, body {
     top: 85.75px;
     width: 181.5px;
     height: 214.5px;
-    transform: translateY(170px);
+    transform: translate3d(0, 170px, 0);
     pointer-events: auto;
     background-repeat: no-repeat;
     will-change: transform;
@@ -176,20 +234,7 @@ html, body {
     pointer-events: none;
 }
 
-#hammer {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 170px;
-    height: 184px;
-    pointer-events: none;
-    z-index: 1000;
-    opacity: 0;
-    transform-origin: 75% 100%;
-    background-repeat: no-repeat;
-    will-change: transform;
-}
-
+#fx-layer,
 #particles {
     position: absolute;
     inset: 0;
@@ -205,24 +250,242 @@ html, body {
     height: 100%;
 }
 
+.fx-coin {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 72px;
+    height: 72px;
+    background: url("assets/textures/brand-coin.webp?v=bb") center / contain no-repeat;
+    opacity: 0;
+    will-change: transform, opacity;
+}
+
+.fx-float {
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--bb-yellow);
+    font-family: "Nunito", "Segoe UI", sans-serif;
+    font-size: 42px;
+    font-weight: 800;
+    text-shadow: 0 2px 0 rgba(30, 0, 65, 0.35);
+    pointer-events: none;
+    will-change: transform, opacity;
+}
+
+#overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 0, 65, 0.42);
+}
+
+#overlay.is-hidden {
+    display: none;
+}
+
+.overlay-card {
+    width: min(560px, 86%);
+    max-height: 92%;
+    overflow: auto;
+    padding: 44px 42px 36px;
+    border-radius: 72px 24px 24px 24px;
+    background: linear-gradient(135deg, rgba(144, 47, 242, 0.94), rgba(255, 0, 144, 0.88));
+    color: var(--bb-white);
+}
+
+.brand-mark {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    margin-bottom: 18px;
+}
+
+#overlay-title {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1.05;
+    margin-bottom: 12px;
+}
+
+#overlay-text {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.25;
+    opacity: 0.95;
+}
+
+#overlay-stats {
+    margin-top: 22px;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1.45;
+}
+
+#overlay-stats[hidden] {
+    display: none;
+}
+
+#mode-hint {
+    margin-top: 18px;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--bb-yellow);
+}
+
+#mode-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.mode-button {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 8px;
+    background: rgba(255, 255, 255, 0.18);
+    color: var(--bb-white);
+    font-family: "Nunito", "Segoe UI", sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: manipulation;
+}
+
+.mode-button.is-selected {
+    background: var(--bb-pink);
+}
+
+#play-button,
+#rules-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 28px;
+    min-width: 220px;
+    border: 0;
+    border-radius: 999px;
+    padding: 16px 46px;
+    background: var(--bb-pink);
+    color: var(--bb-white);
+    font-family: "Nunito", "Segoe UI", sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: manipulation;
+}
+
+#play-button:active,
+#rules-back:active,
+.mode-button:active {
+    background: #e00080;
+}
+
+#rules-button {
+    position: absolute;
+    top: 22px;
+    right: 28px;
+    z-index: 2100;
+    width: 56px;
+    height: 56px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--bb-pink);
+    color: var(--bb-white);
+    font-family: "Nunito", "Segoe UI", sans-serif;
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: manipulation;
+}
+
+#rules-card[hidden],
+#menu-card[hidden] {
+    display: none;
+}
+
+#rules-body {
+    margin-top: 8px;
+}
+
+#rules-body p {
+    margin-top: 12px;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.3;
+}
+
 body.portrait #stage {
     width: 720px;
     height: 1280px;
 }
 
 body.portrait #score-panel {
-    left: 28px;
+    left: 24px;
     top: 36px;
+    padding: 22px 28px 18px 24px;
 }
 
 body.portrait .score-row {
-    height: 84px;
+    height: 56px;
 }
 
 body.portrait .score-label,
-body.portrait #score-value,
-body.portrait #high-score-value {
-    font-size: 48px;
+body.portrait #stash-value,
+body.portrait #timer-value,
+body.portrait #high-score-value,
+body.portrait #combo-banner {
+    font-size: 32px;
+}
+
+body.portrait .score-label {
+    min-width: 118px;
+}
+
+body.portrait .stash-track {
+    width: 180px;
+    height: 16px;
+}
+
+body.portrait .stash-coin-icon {
+    width: 34px;
+    height: 34px;
+}
+
+body.portrait #overlay-title {
+    font-size: 56px;
+}
+
+body.portrait #overlay-text,
+body.portrait #overlay-stats,
+body.portrait #mode-hint,
+body.portrait #rules-body p {
+    font-size: 26px;
+}
+
+body.portrait .mode-button {
+    font-size: 18px;
+    padding: 16px 10px;
+}
+
+body.portrait #rules-button {
+    top: 36px;
+    right: 24px;
+    width: 64px;
+    height: 64px;
+    font-size: 36px;
 }
 
 body.portrait .hole[data-index="0"] {

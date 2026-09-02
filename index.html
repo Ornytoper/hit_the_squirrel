@@ -3,23 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Ударь белку</title>
-    <link rel="stylesheet" href="style.css?v=restore-hole-mask">
+    <title>Помоги белке</title>
+    <link rel="stylesheet" href="style.css?v=coin-bb">
 </head>
 <body>
     <div id="game-container">
         <div id="stage">
             <div id="background"></div>
             <div id="score-panel">
-                <div class="score-row">
-                    <span class="score-label">Текущие очки:</span>
-                    <span id="score-value">0</span>
+                <div class="score-row stash-row">
+                    <span class="stash-coin-icon" aria-hidden="true"></span>
+                    <span class="score-label">Запас</span>
+                    <div class="stash-track">
+                        <div id="stash-fill"></div>
+                    </div>
+                    <span id="stash-value">0/12</span>
                 </div>
                 <div class="score-row">
-                    <span class="score-label">Рекорд:</span>
+                    <span class="score-label">Время</span>
+                    <span id="timer-value">0:25</span>
+                </div>
+                <div class="score-row">
+                    <span class="score-label">Рекорд</span>
                     <span id="high-score-value">0</span>
                 </div>
             </div>
+            <div id="combo-banner" hidden>Серия ×2</div>
             <div id="holes-container">
                 <div class="hole" data-index="0">
                     <div class="hole-image"></div>
@@ -40,10 +49,40 @@
                     </div>
                 </div>
             </div>
-            <div id="hammer"></div>
+            <div id="fx-layer"></div>
             <div id="particles"><canvas id="particles-canvas"></canvas></div>
+            <button type="button" id="rules-button" aria-label="Правила игры">?</button>
+            <div id="overlay">
+                <div class="overlay-card" id="menu-card">
+                    <div class="brand-mark">belbet.</div>
+                    <h1 id="overlay-title">Помоги белке</h1>
+                    <p id="overlay-text">Отдай монету — она спрячет удачу</p>
+                    <div id="overlay-stats" hidden></div>
+                    <p id="mode-hint">16 монет за 22 секунды</p>
+                    <div id="mode-row">
+                        <button type="button" class="mode-button" data-mode="warmup">РАЗМИНКА</button>
+                        <button type="button" class="mode-button is-selected" data-mode="luck">УДАЧА</button>
+                        <button type="button" class="mode-button" data-mode="heat">АЗАРТ</button>
+                    </div>
+                    <button type="button" id="play-button">ИГРАТЬ</button>
+                </div>
+                <div class="overlay-card" id="rules-card" hidden>
+                    <div class="brand-mark">belbet.</div>
+                    <h1>Правила</h1>
+                    <div id="rules-body">
+                        <p>Тапни по белке, когда она вылезет, — отдашь монету в запас.</p>
+                        <p>Тап мимо роняет монету и сбрасывает серию. Если белка нырнула без монеты — серия тоже сгорает.</p>
+                        <p>Серия: 3 подряд даёт ×2, 6 подряд — ×3.</p>
+                        <p>Выиграешь, если заполнишь запас до конца времени.</p>
+                        <p><b>Разминка</b> — 10 монет за 25 секунд, одна белка, прячется через 0,3–0,5 с.</p>
+                        <p><b>Удача</b> — 16 монет за 22 секунды, потом две белки, в конце все три норки, прячется через 0,2–0,5 с.</p>
+                        <p><b>Азарт</b> — 20 монет за 20 секунд, сразу две белки, быстро все три норки, прячется через 0,1–0,5 с.</p>
+                    </div>
+                    <button type="button" id="rules-back">ПОНЯТНО</button>
+                </div>
+            </div>
         </div>
     </div>
-    <script src="game.js?v=mobile-predecode"></script>
+    <script src="game.js?v=coin-bb"></script>
 </body>
 </html>

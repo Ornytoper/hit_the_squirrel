@@ -1,25 +1,74 @@
 const LANDSCAPE_STAGE = { width: 1280, height: 720 };
 const PORTRAIT_STAGE = { width: 720, height: 1280 };
-const HIDE_AFTER_HIT_DELAY = 0.35;
-const MIN_RANDOM_TIMEOUT = 0.1;
-const MAX_RANDOM_TIMEOUT = 0.5;
-const SCREAM_SOUND_MAX_CHANCE = 0.5;
+const HIDE_AFTER_CATCH_DELAY = 0.28;
 const FRAME_DURATION = 0.05;
 const MOVE_DURATION = 0.3;
 const MOVE_OFFSET_Y = 170;
-const HAMMER_Z_ROTATE = -40;
-const HAMMER_HIT_DURATION = 0.1;
-const HAMMER_HIT_OFFSET_X = 50.0;
-const HIGH_SCORE_KEY = 'hitSquirrelMiniGameHighScore';
-const LEGACY_HIGH_SCORE_KEY = 'hitSquirrelHighScore';
+const HIGH_SCORE_PREFIX = 'helpSquirrelMiniGameHighScore';
+const HIGH_SCORE_LEGACY_KEY = 'helpSquirrelMiniGameHighScore';
+const QUERY = Object.fromEntries(new URLSearchParams(location.search).entries());
+const MODES = {
+    warmup: {
+        id: 'warmup',
+        title: 'Разминка',
+        duration: 25,
+        goal: 10,
+        tapWhileRising: true,
+        move: 0.26,
+        catchHide: 0.24,
+        counts: [
+            { at: 0, n: 1 }
+        ],
+        hide: [
+            { at: 0, min: 0.3, max: 0.5 }
+        ]
+    },
+    luck: {
+        id: 'luck',
+        title: 'Удача',
+        duration: 22,
+        goal: 16,
+        tapWhileRising: false,
+        move: 0.2,
+        catchHide: 0.18,
+        counts: [
+            { at: 0, n: 1 },
+            { at: 0.25, n: 2 },
+            { at: 0.6, n: 3 }
+        ],
+        hide: [
+            { at: 0, min: 0.2, max: 0.5 }
+        ]
+    },
+    heat: {
+        id: 'heat',
+        title: 'Азарт',
+        duration: 20,
+        goal: 20,
+        tapWhileRising: false,
+        move: 0.15,
+        catchHide: 0.12,
+        counts: [
+            { at: 0, n: 2 },
+            { at: 0.22, n: 3 }
+        ],
+        hide: [
+            { at: 0, min: 0.1, max: 0.5 }
+        ]
+    }
+};
+const DEFAULT_MODE = MODES[QUERY.mode] || MODES.luck;
+const COIN_TOSS_DURATION = 0.18;
+const COIN_MISS_DURATION = 0.45;
+const WIN_END_DELAY = 0.55;
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edgios|android).)*safari/i.test(navigator.userAgent);
 const USE_SMALL_FRAMES = IS_SAFARI || window.matchMedia('(pointer: coarse)').matches;
-const STAR_COUNT = IS_SAFARI ? 4 : 7;
+const STAR_COUNT = IS_SAFARI ? 4 : 6;
 const MAX_ACTIVE_SFX = 8;
 const DEBUG_FLAGS = Object.assign(
-    { sound: true, stars: true, squirrel: true, hammer: true },
-    Object.fromEntries(new URLSearchParams(location.search).entries())
+    { sound: true, stars: true, squirrel: true, coins: true },
+    QUERY
 );
 const FLAG_ON = v => v !== '0' && v !== 'false' && v !== false;
 
@@ -47,7 +96,7 @@ const Atlas = {
     frameImages: {},
     async load() {
         if (!this.frames) {
-            const response = await fetch('assets/atlases/atlas.json');
+            const response = await fetch('assets/atlases/atlas.json?v=coin-bb');
             const data = await response.json();
             this.size = data.size;
             this.urls = data.atlases;
@@ -70,7 +119,7 @@ const Atlas = {
                     resolve();
                 };
                 img.onerror = reject;
-                img.src = `assets/frames/${name}.webp`;
+                img.src = `assets/frames/${name}.webp?v=coin-bb`;
             })));
         }
     },
@@ -388,8 +437,20 @@ class SquirrelPlayer {
         this.isPunchPlaying = false;
         this.isShockPlaying = false;
         this.offsetY = MOVE_OFFSET_Y;
+        this.appearanceToken = 0;
+        this.scoredThisAppearance = false;
+        this.hideTimer = null;
+        this.hideDelay = 0;
         this._setOffset(MOVE_OFFSET_Y);
         this._syncHitbox();
+    }
+
+    resetDown() {
+        this.stopAll();
+        this.playStatic();
+        this._setOffset(MOVE_OFFSET_Y);
+        this.setInteractable(false);
+        this.scoredThisAppearance = false;
     }
 
     setInteractable(state) {
@@ -426,11 +487,11 @@ class SquirrelPlayer {
         this.playAnimation(ANIMATIONS.punch, yoyo, () => {
             this.isPunchPlaying = false;
             if (onComplete) onComplete();
-        });
+        }, 0.09);
         return true;
     }
 
-    playAnimation(frames, yoyo, onComplete) {
+    playAnimation(frames, yoyo, onComplete, frameDuration) {
         this._stopAnim();
         if (!frames || frames.length === 0) return;
         if (!FLAG_ON(DEBUG_FLAGS.squirrel)) {
@@ -457,7 +518,7 @@ class SquirrelPlayer {
                 } else if (onComplete) {
                     onComplete();
                 }
-            }, FRAME_DURATION * 1000);
+            }, (frameDuration ?? FRAME_DURATION) * 1000);
         };
 
         showFrame();
@@ -470,7 +531,7 @@ class SquirrelPlayer {
 
     _setFrame(name) {
         if (USE_SMALL_FRAMES) {
-            const url = `assets/frames/${name}.webp`;
+            const url = `assets/frames/${name}.webp?v=coin-bb`;
             if (this._frameUrl !== url) {
                 this._frameUrl = url;
                 this.sprite.style.backgroundImage = `url("${url}")`;
@@ -503,13 +564,13 @@ class SquirrelPlayer {
         this.sprite.style.backgroundPosition = style.pos;
     }
 
-    move(isUp, onComplete) {
+    move(isUp, onComplete, duration) {
         this._stopMove();
 
         const from = this.offsetY;
         const to = isUp ? 0 : MOVE_OFFSET_Y;
 
-        this.moveCancel = tween(MOVE_DURATION, t => {
+        this.moveCancel = tween(duration ?? MOVE_DURATION, t => {
             this._setOffset(from + (to - from) * t);
         }, () => {
             this.moveCancel = null;
@@ -528,7 +589,7 @@ class SquirrelPlayer {
 
     _setOffset(offsetY) {
         this.offsetY = offsetY;
-        this.sprite.style.transform = `translateY(${offsetY}px)`;
+        this.sprite.style.transform = `translate3d(0, ${offsetY}px, 0)`;
     }
 
     _syncHitbox() {
@@ -550,18 +611,17 @@ class SquirrelPlayer {
     }
 }
 
-class HammerPlayer {
-    constructor(stage, particlesRoot) {
-        this.element = document.getElementById('hammer');
-        this.particlesRoot = particlesRoot;
+class CoinFx {
+    constructor(stage, layer, particlesRoot) {
+        this.stage = stage;
+        this.layer = layer;
         this.canvas = particlesRoot.querySelector('#particles-canvas');
         this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+        this.pool = [];
         this.stars = [];
+        this.starImg = new Image();
+        this.starImg.src = 'assets/textures/brand-star.webp';
         this.rafId = 0;
-        this.stage = stage;
-        this.animCancel = null;
-        this.isPlaying = false;
-        this.resetHammer();
         this._resizeCanvas();
         if (window.ResizeObserver && this.canvas) {
             this._ro = new ResizeObserver(() => this._resizeCanvas());
@@ -579,49 +639,79 @@ class HammerPlayer {
         }
     }
 
-    playHitAtStagePosition(x, y) {
-        if (!FLAG_ON(DEBUG_FLAGS.hammer)) return false;
-        if (this.isPlaying) return false;
-        this.isPlaying = true;
+    _takeCoin() {
+        const el = this.pool.pop() || document.createElement('div');
+        el.className = 'fx-coin';
+        if (!el.parentNode) this.layer.appendChild(el);
+        el.style.opacity = '1';
+        return el;
+    }
 
-        const strikeX = x + (this.element.offsetWidth + HAMMER_HIT_OFFSET_X);
+    _place(el, x, y, rot, scale) {
+        const size = el.offsetWidth || 72;
+        el.style.transform =
+            `translate(${x - size / 2}px, ${y - size / 2}px) rotate(${rot}deg) scale(${scale})`;
+    }
 
-        this.element.style.left = `${strikeX}px`;
-        this.element.style.top = `${y}px`;
-        this.element.style.opacity = '1';
-        this.element.style.transform = 'translate(-75%, -100%) rotate(0deg)';
-
-        this.animCancel = tween(HAMMER_HIT_DURATION, t => {
-            this.element.style.transform =
-                `translate(-75%, -100%) rotate(${HAMMER_Z_ROTATE * t}deg)`;
+    tossTo(fromX, fromY, toX, toY) {
+        if (!FLAG_ON(DEBUG_FLAGS.coins)) return;
+        const el = this._takeCoin();
+        this._place(el, fromX, fromY, -20, 0.55);
+        tween(COIN_TOSS_DURATION, t => {
+            this._place(
+                el,
+                fromX + (toX - fromX) * t,
+                fromY + (toY - fromY) * t,
+                -20 + t * 140,
+                0.55 + t * 0.5
+            );
         }, () => {
-            const starX = strikeX - (this.element.offsetWidth - HAMMER_HIT_OFFSET_X);
-            this._spawnStars(starX, y);
-            this.resetHammer();
+            this._place(el, toX, toY, 120, 1.05);
+            this.spawnStars(toX, toY);
+            el.style.opacity = '0';
+            this.pool.push(el);
         });
-        return true;
     }
 
-    resetHammer() {
-        this.isPlaying = false;
-        this.animCancel = null;
-        this.element.style.opacity = '0';
-        this.element.style.transform = 'translate(-75%, -100%) rotate(0deg)';
+    missAt(x, y) {
+        if (!FLAG_ON(DEBUG_FLAGS.coins)) return;
+        const el = this._takeCoin();
+        const drift = (Math.random() * 80) - 40;
+        this._place(el, x, y, 0, 0.85);
+        tween(COIN_MISS_DURATION, t => {
+            this._place(el, x + drift * t, y + t * t * 260, t * 200, 0.85 - t * 0.25);
+            el.style.opacity = String(1 - t);
+        }, () => {
+            el.style.opacity = '0';
+            this.pool.push(el);
+        });
     }
 
-    _spawnStars(x, y) {
+    floatText(x, y, text) {
+        const el = document.createElement('div');
+        el.className = 'fx-float';
+        el.textContent = text;
+        this.layer.appendChild(el);
+        el.style.transform = `translate(${x}px, ${y}px)`;
+        tween(0.7, t => {
+            el.style.transform = `translate(${x}px, ${y - 70 * t}px)`;
+            el.style.opacity = String(1 - t);
+        }, () => el.remove());
+    }
+
+    spawnStars(x, y) {
         if (!this.ctx) return;
         if (!FLAG_ON(DEBUG_FLAGS.stars)) return;
-        if (this.stars.length > 0) return;
 
         for (let i = 0; i < STAR_COUNT; i++) {
-            const angle = (Math.PI * 2 * i) / 7 + Math.random() * 0.4;
-            const distance = 40 + Math.random() * 50;
+            const angle = (Math.PI * 2 * i) / STAR_COUNT + Math.random() * 0.35;
+            const distance = 46 + Math.random() * 42;
             this.stars.push({
                 x, y,
                 vx: Math.cos(angle) * distance,
                 vy: Math.sin(angle) * distance,
-                size: 16 + Math.random() * 8,
+                size: 22 + Math.random() * 14,
+                rot: Math.random() * Math.PI,
                 born: performance.now()
             });
         }
@@ -634,29 +724,35 @@ class HammerPlayer {
             const now = performance.now();
             const ctx = this.ctx;
             ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            const img = this.starImg;
+            const ready = img.complete && img.naturalWidth > 0;
 
             this.stars = this.stars.filter(star => {
-                const age = (now - star.born) / 450;
+                const age = (now - star.born) / 480;
                 if (age >= 1) return false;
 
                 const t = 1 - Math.pow(1 - age, 2);
                 const cx = star.x + star.vx * t;
                 const cy = star.y + star.vy * t;
-                const scale = 1 - age * 0.8;
-                const rot = age * 2.1;
+                const scale = 1 - age * 0.75;
                 const s = star.size * scale;
 
                 ctx.save();
                 ctx.translate(cx, cy);
-                ctx.rotate(rot);
+                ctx.rotate(star.rot + age * 1.6);
                 ctx.globalAlpha = 1 - age;
-                ctx.fillStyle = '#fff8c8';
-                ctx.beginPath();
-                const pts = [[0,-0.5],[0.11,-0.15],[0.48,-0.15],[0.18,0.07],[0.29,0.41],[0,0.2],[-0.29,0.41],[-0.18,0.07],[-0.48,-0.15],[-0.11,-0.15]];
-                ctx.moveTo(pts[0][0]*s, pts[0][1]*s);
-                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0]*s, pts[i][1]*s);
-                ctx.closePath();
-                ctx.fill();
+                if (ready) {
+                    ctx.drawImage(img, -s / 2, -s / 2, s, s);
+                } else {
+                    ctx.fillStyle = '#902FF2';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -s / 2);
+                    ctx.lineTo(s * 0.18, 0);
+                    ctx.lineTo(0, s / 2);
+                    ctx.lineTo(-s * 0.18, 0);
+                    ctx.closePath();
+                    ctx.fill();
+                }
                 ctx.restore();
                 return true;
             });
@@ -669,70 +765,135 @@ class HammerPlayer {
             }
         });
     }
-
-    _stopAnim() {
-        if (this.animCancel) {
-            this.animCancel();
-            this.animCancel = null;
-        }
-    }
 }
 
 class ScoreManager {
     constructor() {
-        this.score = 0;
-        this.highScore = this._loadHighScore();
-        this.scoreElement = document.getElementById('score-value');
+        this.stash = 0;
+        this.combo = 0;
+        this.bestCombo = 0;
+        this.goal = DEFAULT_MODE.goal;
+        this.modeId = DEFAULT_MODE.id;
+        this.highScores = this._loadAll();
+        this.highScore = this.highScores[this.modeId] || 0;
+        this.stashFill = document.getElementById('stash-fill');
+        this.stashValue = document.getElementById('stash-value');
         this.highScoreElement = document.getElementById('high-score-value');
+        this.comboBanner = document.getElementById('combo-banner');
         this.highScoreElement.textContent = this.highScore;
-        this.scoreElement.textContent = '0';
-        window.addEventListener('pagehide', () => this._persistHighScore());
+        this._render();
+        window.addEventListener('pagehide', () => this.persist());
     }
 
-    addScore() {
-        this.score += 1;
-        this.scoreElement.textContent = this.score;
+    setMode(mode) {
+        this.persist();
+        this.modeId = mode.id;
+        this.goal = mode.goal;
+        this.highScore = this.highScores[mode.id] || 0;
+        this.highScoreElement.textContent = this.highScore;
+        this._render();
+    }
 
-        if (this.score > this.highScore) {
-            this.highScore = this.score;
+    multiplier() {
+        if (this.combo >= 6) return 3;
+        if (this.combo >= 3) return 2;
+        return 1;
+    }
+
+    addCatch() {
+        this.combo += 1;
+        if (this.combo > this.bestCombo) this.bestCombo = this.combo;
+        const gained = this.multiplier();
+        this.stash += gained;
+        if (this.stash > this.highScore) {
+            this.highScore = this.stash;
+            this.highScores[this.modeId] = this.highScore;
             this.highScoreElement.textContent = this.highScore;
         }
+        this._render();
+        return gained;
+    }
+
+    breakCombo() {
+        if (this.combo === 0) return;
+        this.combo = 0;
+        this._render();
     }
 
     reset() {
-        this.score = 0;
-        this.scoreElement.textContent = '0';
+        this.stash = 0;
+        this.combo = 0;
+        this.bestCombo = 0;
+        this._render();
     }
 
-    _loadHighScore() {
-        const current = parseInt(localStorage.getItem(HIGH_SCORE_KEY), 10);
-        if (!Number.isNaN(current)) return current;
-
-        const legacy = parseInt(localStorage.getItem(LEGACY_HIGH_SCORE_KEY), 10);
-        return Number.isNaN(legacy) ? 0 : legacy;
+    persist() {
+        this.highScores[this.modeId] = this.highScore;
+        localStorage.setItem(`${HIGH_SCORE_PREFIX}.${this.modeId}`, String(this.highScore));
     }
 
-    _persistHighScore() {
-        if (this.score >= this.highScore) {
-            localStorage.setItem(HIGH_SCORE_KEY, String(this.score));
+    _render() {
+        const ratio = Math.min(1, this.stash / this.goal);
+        this.stashFill.style.width = `${ratio * 100}%`;
+        this.stashValue.textContent = `${this.stash}/${this.goal}`;
+        const mult = this.multiplier();
+        if (this.combo >= 3) {
+            this.comboBanner.hidden = false;
+            this.comboBanner.textContent = `Серия ×${mult}`;
         } else {
-            localStorage.setItem(HIGH_SCORE_KEY, String(this.highScore));
+            this.comboBanner.hidden = true;
         }
+    }
+
+    _loadAll() {
+        const scores = {};
+        Object.keys(MODES).forEach(id => {
+            const value = parseInt(localStorage.getItem(`${HIGH_SCORE_PREFIX}.${id}`), 10);
+            scores[id] = Number.isNaN(value) ? 0 : value;
+        });
+        if (!scores.luck) {
+            const legacy = parseInt(localStorage.getItem(HIGH_SCORE_LEGACY_KEY), 10);
+            if (!Number.isNaN(legacy)) scores.luck = legacy;
+        }
+        return scores;
     }
 }
 
-class HitTheSquirrelGame {
+class HelpTheSquirrelGame {
     constructor() {
         this.stage = document.getElementById('stage');
+        this.overlay = document.getElementById('overlay');
+        this.menuCard = document.getElementById('menu-card');
+        this.rulesCard = document.getElementById('rules-card');
+        this.overlayTitle = document.getElementById('overlay-title');
+        this.overlayText = document.getElementById('overlay-text');
+        this.overlayStats = document.getElementById('overlay-stats');
+        this.modeHint = document.getElementById('mode-hint');
+        this.playButton = document.getElementById('play-button');
+        this.rulesButton = document.getElementById('rules-button');
+        this.rulesBack = document.getElementById('rules-back');
+        this.timerValue = document.getElementById('timer-value');
+        this.mode = DEFAULT_MODE;
+        this.paused = false;
+        this.pauseStarted = 0;
+        this.rulesFromPlay = false;
         this.audioManager = new AudioManager();
-        this.hammer = new HammerPlayer(this.stage, document.getElementById('particles'));
+        this.coins = new CoinFx(
+            this.stage,
+            document.getElementById('fx-layer'),
+            document.getElementById('particles')
+        );
         this.scoreManager = new ScoreManager();
         this.squirrels = [];
-        this.currentRoundId = 0;
-        this.currentSquirrel = null;
-        this.hideTimer = null;
-        this.isCurrentSquirrelScored = false;
+        this.active = new Set();
+        this.hiding = new Set();
+        this.appearanceSeq = 0;
+        this.nextSpawnAt = 0;
         this.isPlaying = false;
+        this.roundClosing = false;
+        this.roundStart = 0;
+        this.roundRaf = 0;
+        this.endTimer = null;
         this.stageWidth = LANDSCAPE_STAGE.width;
         this.stageHeight = LANDSCAPE_STAGE.height;
         this.isPortrait = false;
@@ -741,6 +902,7 @@ class HitTheSquirrelGame {
         this._initSquirrels();
         this._bindEvents();
         this._fitStage();
+        this._applyMode(this.mode, false);
         this.audioManager.preload();
     }
 
@@ -748,7 +910,6 @@ class HitTheSquirrelGame {
         if (!Atlas.frames) return;
         const bgFit = this.isPortrait ? 'cover-y40' : 'fill';
         Atlas.paint(document.getElementById('background'), 'HitTheSquirrelMiniGame_Bg', bgFit);
-        Atlas.paint(document.getElementById('hammer'), 'HammerSquirrelMiniGame', 'contain-bottom');
     }
 
     _initSquirrels() {
@@ -826,127 +987,354 @@ class HitTheSquirrelGame {
                 event.preventDefault();
                 event.stopPropagation();
                 this.audioManager.unlock();
-                if (!this.isPlaying) return;
-                if (squirrel !== this.currentSquirrel || !squirrel.interactable) return;
+                if (!this.isPlaying || this.roundClosing || this.paused) return;
+                if (!this.active.has(squirrel) || !squirrel.interactable) return;
                 const { x, y } = pointFromEvent(event);
-                this._onTouchSquirrel(x, y);
+                this._onGiveCoin(squirrel, x, y);
             });
         });
 
         this.stage.addEventListener('pointerdown', (event) => {
+            if (event.target.closest('#overlay, #rules-button')) return;
             event.preventDefault();
             this.audioManager.unlock();
-            if (!this.isPlaying) return;
+            if (!this.isPlaying || this.roundClosing || this.paused) return;
             const { x, y } = pointFromEvent(event);
             this._onMiss(x, y);
         });
+
+        this.playButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.audioManager.unlock();
+            this.startRound();
+        });
+
+        this.overlay.querySelectorAll('.mode-button').forEach(button => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.audioManager.unlock();
+                this._applyMode(MODES[button.dataset.mode], true);
+            });
+        });
+
+        this.rulesButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.audioManager.unlock();
+            this._openRules();
+        });
+
+        this.rulesBack.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this._closeRules();
+        });
+    }
+
+    _applyMode(mode, updateButtons) {
+        if (!mode) return;
+        this.mode = mode;
+        this.scoreManager.setMode(mode);
+        this.modeHint.textContent = `${mode.goal} монет за ${mode.duration} секунд`;
+        this._setTimer(mode.duration);
+        if (updateButtons) {
+            this.overlay.querySelectorAll('.mode-button').forEach(button => {
+                button.classList.toggle('is-selected', button.dataset.mode === mode.id);
+            });
+        }
+    }
+
+    _openRules() {
+        this.rulesFromPlay = this.isPlaying && !this.roundClosing;
+        if (this.rulesFromPlay) this._pauseRound();
+        this.menuCard.hidden = true;
+        this.rulesCard.hidden = false;
+        this.overlay.classList.remove('is-hidden');
+    }
+
+    _closeRules() {
+        this.rulesCard.hidden = true;
+        if (this.rulesFromPlay) {
+            this.overlay.classList.add('is-hidden');
+            this.menuCard.hidden = false;
+            this.rulesFromPlay = false;
+            this._resumeRound();
+            return;
+        }
+        this.menuCard.hidden = false;
+    }
+
+    _pauseRound() {
+        if (this.paused || !this.isPlaying) return;
+        this.paused = true;
+        this.pauseStarted = nowSeconds();
+        if (this.roundRaf) {
+            cancelAnimationFrame(this.roundRaf);
+            this.roundRaf = 0;
+        }
+        this.squirrels.forEach(squirrel => {
+            if (!squirrel.hideTimer) return;
+            squirrel.hidePausedRemain = Math.max(0, squirrel.hideDeadline - nowSeconds());
+            this._cancelHideTimer(squirrel);
+        });
+    }
+
+    _resumeRound() {
+        if (!this.paused) return;
+        const pauseDt = nowSeconds() - this.pauseStarted;
+        this.roundStart += pauseDt;
+        if (this.nextSpawnAt) this.nextSpawnAt += pauseDt;
+        this.paused = false;
+        this.squirrels.forEach(squirrel => {
+            if (squirrel.hidePausedRemain == null) return;
+            this._startHideTimer(squirrel, squirrel.appearanceToken, squirrel.hidePausedRemain);
+            squirrel.hidePausedRemain = null;
+        });
+        this.roundRaf = requestAnimationFrame(() => this._tickRound());
+    }
+
+    _elapsed() {
+        return nowSeconds() - this.roundStart;
+    }
+
+    _progressStep(list) {
+        const progress = this._elapsed() / this.mode.duration;
+        let step = list[0];
+        list.forEach(entry => {
+            if (progress >= entry.at) step = entry;
+        });
+        return step;
+    }
+
+    _desiredCount() {
+        return this._progressStep(this.mode.counts).n;
+    }
+
+    _hideDelay() {
+        const step = this._progressStep(this.mode.hide);
+        return step.min + Math.random() * (step.max - step.min);
+    }
+
+    _setTimer(secondsLeft) {
+        const whole = Math.max(0, Math.ceil(secondsLeft));
+        const mins = Math.floor(whole / 60);
+        const secs = String(whole % 60).padStart(2, '0');
+        this.timerValue.textContent = `${mins}:${secs}`;
+        this.timerValue.classList.toggle('is-urgent', secondsLeft <= 5);
+    }
+
+    _catchPoint(squirrel) {
+        const hole = squirrel.element;
+        const sprite = squirrel.sprite;
+        return {
+            x: hole.offsetLeft + sprite.offsetLeft + sprite.offsetWidth * 0.5,
+            y: hole.offsetTop + sprite.offsetTop + squirrel.offsetY + sprite.offsetHeight * 0.42
+        };
     }
 
     _onMiss(x, y) {
         this.audioManager.play('miss');
-        this.hammer.playHitAtStagePosition(x, y);
+        this.coins.missAt(x, y);
+        this.scoreManager.breakCombo();
     }
 
-    _onTouchSquirrel(x, y) {
-        const currentSquirrel = this.currentSquirrel;
-        if (!currentSquirrel) return;
+    _onGiveCoin(squirrel, x, y) {
+        if (squirrel.scoredThisAppearance || squirrel.isPunchPlaying) return;
 
-        const roundId = this.currentRoundId;
+        const token = squirrel.appearanceToken;
+        const target = this._catchPoint(squirrel);
+        this.coins.tossTo(x, y, target.x, target.y);
 
-        this.hammer.playHitAtStagePosition(x, y);
+        squirrel.scoredThisAppearance = true;
+        squirrel.setInteractable(false);
+        this._cancelHideTimer(squirrel);
 
-        // Repeated taps may show another hammer hit, but must not cancel the
-        // pending hide while the squirrel is already reacting.
-        if (currentSquirrel.isPunchPlaying || currentSquirrel.isShockPlaying) return;
-
-        this._cancelHideTimer();
         this.audioManager.play('hitTarget');
-        if (Math.random() <= SCREAM_SOUND_MAX_CHANCE) {
-            this.audioManager.play('scream');
+        const gained = this.scoreManager.addCatch();
+        this.coins.floatText(target.x - 18, target.y - 24, `+${gained}`);
+
+        if (this.scoreManager.stash >= this.mode.goal) {
+            this._scheduleEnd(true);
         }
 
-        if (!this.isCurrentSquirrelScored) {
-            this.scoreManager.addScore();
-            this.isCurrentSquirrelScored = true;
-        }
-
-        currentSquirrel.playPunch(false, () => {
-            if (!this._isCurrentRound(roundId, currentSquirrel)) return;
-
+        squirrel.playPunch(false, () => {
+            if (squirrel.appearanceToken !== token) return;
             this.audioManager.play('stars');
-            currentSquirrel.playShock(true);
-            this.audioManager.play('hide');
-            this._startHideTimer(roundId, currentSquirrel, HIDE_AFTER_HIT_DELAY);
+            this._startHideTimer(squirrel, token, this.mode.catchHide);
         });
     }
 
-    playGame() {
-        this._cancelHideTimer();
-        this.squirrels.forEach(squirrel => squirrel.setInteractable(false));
-        this.isCurrentSquirrelScored = false;
-        this.currentRoundId += 1;
+    _pickFree() {
+        const busy = new Set(
+            [...this.active, ...this.hiding].map(squirrel => squirrel.index)
+        );
+        const free = this.squirrels.filter(squirrel => !busy.has(squirrel.index));
+        if (free.length === 0) return null;
+        return free[Math.floor(Math.random() * free.length)];
+    }
 
-        const roundId = this.currentRoundId;
-        const squirrel = this.squirrels[Math.floor(Math.random() * this.squirrels.length)];
-        this.currentSquirrel = squirrel;
+    _fillSpawns() {
+        if (!this.isPlaying || this.roundClosing || this.paused) return;
+        while (this.active.size < this._desiredCount()) {
+            if (nowSeconds() < this.nextSpawnAt) break;
+            const squirrel = this._pickFree();
+            if (!squirrel) break;
+            this._appear(squirrel);
+            if (this.active.size < this._desiredCount()) {
+                this.nextSpawnAt = nowSeconds() + 0.08 + Math.random() * 0.22;
+            }
+        }
+    }
 
-        squirrel.setInteractable(true);
+    _appear(squirrel) {
+        const token = ++this.appearanceSeq;
+        squirrel.appearanceToken = token;
+        squirrel.scoredThisAppearance = false;
+        squirrel.hideDelay = this._hideDelay();
+        this.active.add(squirrel);
+        squirrel.setInteractable(!!this.mode.tapWhileRising);
         squirrel.playStatic();
         this.audioManager.play('show');
 
         squirrel.move(true, () => {
-            if (!this._isCurrentRound(roundId, squirrel)) return;
-
-            squirrel.playIdle(false, () => {
-                if (!this._isCurrentRound(roundId, squirrel)) return;
-                this._startHideTimer(roundId, squirrel, this._randomTimeout());
-            });
-        });
+            if (squirrel.appearanceToken !== token) return;
+            squirrel.setInteractable(true);
+            this._startHideTimer(squirrel, token, squirrel.hideDelay);
+        }, this.mode.move);
     }
 
-    _randomTimeout() {
-        return MIN_RANDOM_TIMEOUT + Math.random() * (MAX_RANDOM_TIMEOUT - MIN_RANDOM_TIMEOUT);
-    }
-
-    _isCurrentRound(roundId, squirrel) {
-        return this.currentRoundId === roundId && this.currentSquirrel === squirrel;
-    }
-
-    _startHideTimer(roundId, squirrel, delay) {
-        this._cancelHideTimer();
-
-        this.hideTimer = setTimeout(() => {
-            this.hideTimer = null;
-            if (!this._isCurrentRound(roundId, squirrel)) return;
-
-            squirrel.setInteractable(false);
-            squirrel.playStatic();
-            this.currentSquirrel = null;
-
-            squirrel.move(false, () => {
-                if (this.currentRoundId !== roundId) return;
-                this.playGame();
-            });
+    _startHideTimer(squirrel, token, delay) {
+        this._cancelHideTimer(squirrel);
+        squirrel.hideDeadline = nowSeconds() + delay;
+        squirrel.hideTimer = setTimeout(() => {
+            squirrel.hideTimer = null;
+            if (squirrel.appearanceToken !== token) return;
+            this.audioManager.play('hide');
+            this._retreat(squirrel, token, !squirrel.scoredThisAppearance);
         }, delay * 1000);
     }
 
-    _cancelHideTimer() {
-        if (this.hideTimer) {
-            clearTimeout(this.hideTimer);
-            this.hideTimer = null;
+    _retreat(squirrel, token, missed) {
+        this._cancelHideTimer(squirrel);
+        squirrel.setInteractable(false);
+        squirrel.playStatic();
+        this.active.delete(squirrel);
+        this.hiding.add(squirrel);
+
+        if (missed) this.scoreManager.breakCombo();
+
+        squirrel.move(false, () => {
+            this.hiding.delete(squirrel);
+            if (squirrel.appearanceToken !== token) return;
+            this._fillSpawns();
+        }, this.mode.move);
+    }
+
+    _cancelHideTimer(squirrel) {
+        if (squirrel.hideTimer) {
+            clearTimeout(squirrel.hideTimer);
+            squirrel.hideTimer = null;
         }
     }
 
-    start() {
+    _tickRound() {
+        if (!this.isPlaying || this.paused) return;
+        const left = this.mode.duration - this._elapsed();
+        this._setTimer(left);
+        if (this.roundClosing) {
+            this.roundRaf = requestAnimationFrame(() => this._tickRound());
+            return;
+        }
+        if (left <= 0) {
+            this._endRound(this.scoreManager.stash >= this.mode.goal);
+            return;
+        }
+        this._fillSpawns();
+        this.roundRaf = requestAnimationFrame(() => this._tickRound());
+    }
+
+    _scheduleEnd(won) {
+        if (this.roundClosing) return;
+        this.roundClosing = true;
+        this.endTimer = setTimeout(() => this._endRound(won), WIN_END_DELAY * 1000);
+    }
+
+    _endRound(won) {
+        if (!this.isPlaying && this.roundClosing && this.endTimer === null) return;
+        this.isPlaying = false;
+        this.roundClosing = true;
+        if (this.roundRaf) {
+            cancelAnimationFrame(this.roundRaf);
+            this.roundRaf = 0;
+        }
+        if (this.endTimer) {
+            clearTimeout(this.endTimer);
+            this.endTimer = null;
+        }
+
+        this.squirrels.forEach(squirrel => {
+            this._cancelHideTimer(squirrel);
+            squirrel.appearanceToken = -1;
+            squirrel.resetDown();
+        });
+        this.active.clear();
+        this.hiding.clear();
+        this.scoreManager.persist();
+        this._setTimer(0);
+        this._showResult(won);
+    }
+
+    _showResult(won) {
+        this.overlayTitle.textContent = won ? 'Удача поймана!' : 'Ещё попытка?';
+        this.overlayText.textContent = won
+            ? 'Белка спрятала весь запас'
+            : `Набери ${this.mode.goal} монет за ${this.mode.duration} секунд — тапни по белке, чтобы отдать монету`;
+        this.overlayStats.hidden = false;
+        this.overlayStats.innerHTML =
+            `${this.mode.title}<br>Запас: ${this.scoreManager.stash}<br>Лучшая серия: ${this.scoreManager.bestCombo}`;
+        this.playButton.textContent = 'ЕЩЁ РАЗ';
+        this.menuCard.hidden = false;
+        this.rulesCard.hidden = true;
+        this.overlay.classList.remove('is-hidden');
+    }
+
+    _hideOverlay() {
+        this.overlay.classList.add('is-hidden');
+    }
+
+    startRound() {
+        if (this.endTimer) {
+            clearTimeout(this.endTimer);
+            this.endTimer = null;
+        }
+        this._hideOverlay();
         this.isPlaying = true;
+        this.roundClosing = false;
+        this.roundStart = nowSeconds();
+        this.appearanceSeq += 1;
+        this.nextSpawnAt = 0;
+        this.paused = false;
         this.scoreManager.reset();
-        this.playGame();
+        this._setTimer(this.mode.duration);
+        this.squirrels.forEach(squirrel => squirrel.resetDown());
+        this.active.clear();
+        this.hiding.clear();
+        this._fillSpawns();
+        if (this.roundRaf) cancelAnimationFrame(this.roundRaf);
+        this.roundRaf = requestAnimationFrame(() => this._tickRound());
     }
 }
 
 Atlas.load().then(() => {
-    const game = new HitTheSquirrelGame();
-    game.start();
+    const game = new HelpTheSquirrelGame();
+    game._applyWorldArt();
+    if (FLAG_ON(QUERY.autostart) && QUERY.autostart !== undefined) {
+        game.audioManager.unlock();
+        game.startRound();
+    }
 }).catch((error) => {
     console.error('Failed to load sprite atlases', error);
 });
+
