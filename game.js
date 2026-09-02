@@ -96,7 +96,7 @@ const Atlas = {
     frameImages: {},
     async load() {
         if (!this.frames) {
-            const response = await fetch('assets/atlases/atlas.json');
+            const response = await fetch('assets/atlases/atlas.json?v=coin-bb');
             const data = await response.json();
             this.size = data.size;
             this.urls = data.atlases;
@@ -119,7 +119,7 @@ const Atlas = {
                     resolve();
                 };
                 img.onerror = reject;
-                img.src = `assets/frames/${name}.webp?v=joy`;
+                img.src = `assets/frames/${name}.webp?v=coin-bb`;
             })));
         }
     },
@@ -531,7 +531,7 @@ class SquirrelPlayer {
 
     _setFrame(name) {
         if (USE_SMALL_FRAMES) {
-            const url = `assets/frames/${name}.webp?v=joy`;
+            const url = `assets/frames/${name}.webp?v=coin-bb`;
             if (this._frameUrl !== url) {
                 this._frameUrl = url;
                 this.sprite.style.backgroundImage = `url("${url}")`;

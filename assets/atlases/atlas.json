@@ -3,7 +3,7 @@
         "atlases": [
                 "assets/atlases/atlas-0.webp",
                 "assets/atlases/atlas-1.webp?v=joy",
-                "assets/atlases/atlas-2.webp?v=joy"
+                "assets/atlases/atlas-2.webp?v=coin-bb"
         ],
   "frames": {
     "HitTheSquirrelMiniGame_Bg": {
