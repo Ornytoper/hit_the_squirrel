@@ -523,6 +523,7 @@ class HammerPlayer {
         this.rafId = 0;
         this.stage = stage;
         this.animCancel = null;
+        this.isPlaying = false;
         this.resetHammer();
         this._resizeCanvas();
         if (window.ResizeObserver && this.canvas) {
@@ -542,8 +543,9 @@ class HammerPlayer {
     }
 
     playHitAtStagePosition(x, y) {
-        if (!FLAG_ON(DEBUG_FLAGS.hammer)) return;
-        this._stopAnim();
+        if (!FLAG_ON(DEBUG_FLAGS.hammer)) return false;
+        if (this.isPlaying) return false;
+        this.isPlaying = true;
 
         const strikeX = x + (this.element.offsetWidth + HAMMER_HIT_OFFSET_X);
 
@@ -560,9 +562,12 @@ class HammerPlayer {
             this._spawnStars(starX, y);
             this.resetHammer();
         });
+        return true;
     }
 
     resetHammer() {
+        this.isPlaying = false;
+        this.animCancel = null;
         this.element.style.opacity = '0';
         this.element.style.transform = 'translate(-75%, -100%) rotate(0deg)';
     }
