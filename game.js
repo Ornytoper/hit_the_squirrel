@@ -15,6 +15,7 @@ const LEGACY_HIGH_SCORE_KEY = 'hitSquirrelHighScore';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edgios|android).)*safari/i.test(navigator.userAgent);
 const STAR_COUNT = IS_SAFARI ? 4 : 7;
+const SAFARI_AUDIO_POOL_SIZE = 6;
 const DEBUG_FLAGS = Object.assign(
     { sound: true, stars: true, squirrel: true, hammer: true },
     Object.fromEntries(new URLSearchParams(location.search).entries())
@@ -208,6 +209,7 @@ class AudioManager {
         this.buffers = {};
         this.spriteMap = null;
         this.spriteReady = null;
+        this.safariPools = {};
         this.ext = this._pickExt();
     }
 
@@ -222,15 +224,36 @@ class AudioManager {
         return this.ext === 'ogg' ? path : path.replace(/\.ogg$/i, `.${this.ext}`);
     }
 
-    preload() {}
+    preload() {
+        if (IS_SAFARI) this._initSafariPools();
+    }
+
+    _initSafariPools() {
+        Object.entries(SOUNDS).forEach(([name, entry]) => {
+            if (name === 'music' || this.safariPools[name]) return;
+
+            const size = Math.max(SAFARI_AUDIO_POOL_SIZE, entry.srcs.length);
+            const voices = Array.from({ length: size }, (_, index) => {
+                const src = this._src(entry.srcs[index % entry.srcs.length]);
+                const audio = new Audio(src);
+                audio.preload = 'auto';
+                audio.playsInline = true;
+                audio.load();
+                audio.addEventListener('ended', () => {
+                    audio.currentTime = 0;
+                });
+                return audio;
+            });
+
+            this.safariPools[name] = { voices, cursor: 0 };
+        });
+    }
 
     unlock() {
         if (this.unlocked) return;
         this.unlocked = true;
 
-        if (IS_SAFARI) {
-            this._loadSprite();
-        } else {
+        if (!IS_SAFARI) {
             const Ctx = window.AudioContext || window.webkitAudioContext;
             if (Ctx) {
                 this.ctx = new Ctx();
@@ -244,20 +267,6 @@ class AudioManager {
 
     _loadSprite() {
         if (this.spriteReady) return this.spriteReady;
-
-        if (IS_SAFARI) {
-            this._safariAudio = new Audio('assets/sounds/sprites.m4a');
-            this._safariAudio.preload = 'auto';
-            this._safariAudio.playsInline = true;
-            this._safariAudio.load();
-            this.spriteReady = fetch('assets/sounds/sprites.json')
-                .then(r => r.json())
-                .then(meta => {
-                    this.spriteMap = {};
-                    meta.forEach(m => { this.spriteMap[m.name] = m; });
-                }).catch(() => {});
-            return this.spriteReady;
-        }
 
         this.spriteReady = Promise.all([
             fetch('assets/sounds/sprites.json').then(r => r.json()),
@@ -278,6 +287,11 @@ class AudioManager {
         const entry = SOUNDS[name];
         if (!entry) return;
 
+        if (IS_SAFARI) {
+            this._playSafariPool(name);
+            return;
+        }
+
         const srcs = entry.srcs;
         let index;
 
@@ -294,23 +308,25 @@ class AudioManager {
 
         this.lastIndex[name] = index;
         const stem = srcs[index].split('/').pop().replace(/\.ogg$/i, '');
-
-        if (IS_SAFARI) {
-            this._playSafariHtml(stem);
-        } else {
-            this._playSpriteClip(stem);
-        }
+        this._playSpriteClip(stem);
     }
 
-    _playSafariHtml(stem) {
-        const meta = this.spriteMap && this.spriteMap[stem];
-        const audio = this._safariAudio;
-        if (!meta || !audio) return;
+    _playSafariPool(name) {
+        const pool = this.safariPools[name];
+        if (!pool) return;
 
-        audio.currentTime = meta.start;
-        audio.play().catch(() => {});
-        clearTimeout(this._safariStop);
-        this._safariStop = setTimeout(() => audio.pause(), meta.dur * 1000);
+        for (let offset = 0; offset < pool.voices.length; offset++) {
+            const index = (pool.cursor + offset) % pool.voices.length;
+            const audio = pool.voices[index];
+            if (!audio.paused && !audio.ended) continue;
+
+            pool.cursor = (index + 1) % pool.voices.length;
+            audio.play().catch(() => {});
+            return;
+        }
+
+        // Every cached voice is still playing. Drop this sound instead of
+        // seeking an active decoder, which causes stalls in Safari.
     }
 
     _playSpriteClip(stem) {
