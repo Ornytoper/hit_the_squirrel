@@ -348,6 +348,7 @@ class SquirrelPlayer {
         this.interactable = false;
         this.animCancel = null;
         this.moveCancel = null;
+        this.isPunchPlaying = false;
         this.offsetY = MOVE_OFFSET_Y;
         this._setOffset(MOVE_OFFSET_Y);
         this._syncHitbox();
@@ -360,6 +361,7 @@ class SquirrelPlayer {
 
     playStatic() {
         this._stopAnim();
+        this.isPunchPlaying = false;
         this._setFrame('staticSquirrel');
     }
 
@@ -372,7 +374,14 @@ class SquirrelPlayer {
     }
 
     playPunch(yoyo, onComplete) {
-        this.playAnimation(ANIMATIONS.punch, yoyo, onComplete);
+        if (this.isPunchPlaying) return false;
+
+        this.isPunchPlaying = true;
+        this.playAnimation(ANIMATIONS.punch, yoyo, () => {
+            this.isPunchPlaying = false;
+            if (onComplete) onComplete();
+        });
+        return true;
     }
 
     playAnimation(frames, yoyo, onComplete) {
@@ -467,6 +476,7 @@ class SquirrelPlayer {
     stopAll() {
         this._stopAnim();
         this._stopMove();
+        this.isPunchPlaying = false;
     }
 
     _setOffset(offsetY) {
