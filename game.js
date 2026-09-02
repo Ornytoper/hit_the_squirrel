@@ -15,7 +15,7 @@ const LEGACY_HIGH_SCORE_KEY = 'hitSquirrelHighScore';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edgios|android).)*safari/i.test(navigator.userAgent);
 const STAR_COUNT = IS_SAFARI ? 4 : 7;
-const SAFARI_AUDIO_POOL_SIZE = 6;
+const SAFARI_AUDIO_POOL_SIZE = 8;
 const DEBUG_FLAGS = Object.assign(
     { sound: true, stars: true, squirrel: true, hammer: true },
     Object.fromEntries(new URLSearchParams(location.search).entries())
@@ -209,7 +209,8 @@ class AudioManager {
         this.buffers = {};
         this.spriteMap = null;
         this.spriteReady = null;
-        this.safariPools = {};
+        this.safariPool = null;
+        this.safariSoundUrls = {};
         this.ext = this._pickExt();
     }
 
@@ -225,27 +226,42 @@ class AudioManager {
     }
 
     preload() {
-        if (IS_SAFARI) this._initSafariPools();
+        if (IS_SAFARI) {
+            this._initSafariPool();
+            this._cacheSafariSounds();
+        }
     }
 
-    _initSafariPools() {
-        Object.entries(SOUNDS).forEach(([name, entry]) => {
-            if (name === 'music' || this.safariPools[name]) return;
+    _initSafariPool() {
+        if (this.safariPool) return;
 
-            const size = Math.max(SAFARI_AUDIO_POOL_SIZE, entry.srcs.length);
-            const voices = Array.from({ length: size }, (_, index) => {
-                const src = this._src(entry.srcs[index % entry.srcs.length]);
-                const audio = new Audio(src);
-                audio.preload = 'auto';
-                audio.playsInline = true;
-                audio.load();
-                audio.addEventListener('ended', () => {
-                    audio.currentTime = 0;
-                });
-                return audio;
+        const voices = Array.from({ length: SAFARI_AUDIO_POOL_SIZE }, () => {
+            const audio = new Audio();
+            audio.preload = 'auto';
+            audio.playsInline = true;
+            audio.addEventListener('ended', () => {
+                audio.currentTime = 0;
             });
+            return audio;
+        });
 
-            this.safariPools[name] = { voices, cursor: 0 };
+        this.safariPool = { voices, cursor: 0 };
+    }
+
+    _cacheSafariSounds() {
+        const sources = new Set(
+            Object.entries(SOUNDS)
+                .filter(([name]) => name !== 'music')
+                .flatMap(([, entry]) => entry.srcs.map(src => this._src(src)))
+        );
+
+        sources.forEach(src => {
+            fetch(src)
+                .then(response => response.blob())
+                .then(blob => {
+                    this.safariSoundUrls[src] = URL.createObjectURL(blob);
+                })
+                .catch(() => {});
         });
     }
 
@@ -287,11 +303,6 @@ class AudioManager {
         const entry = SOUNDS[name];
         if (!entry) return;
 
-        if (IS_SAFARI) {
-            this._playSafariPool(name);
-            return;
-        }
-
         const srcs = entry.srcs;
         let index;
 
@@ -307,12 +318,18 @@ class AudioManager {
         }
 
         this.lastIndex[name] = index;
+
+        if (IS_SAFARI) {
+            this._playSafariPool(this._src(srcs[index]));
+            return;
+        }
+
         const stem = srcs[index].split('/').pop().replace(/\.ogg$/i, '');
         this._playSpriteClip(stem);
     }
 
-    _playSafariPool(name) {
-        const pool = this.safariPools[name];
+    _playSafariPool(src) {
+        const pool = this.safariPool;
         if (!pool) return;
 
         for (let offset = 0; offset < pool.voices.length; offset++) {
@@ -321,6 +338,12 @@ class AudioManager {
             if (!audio.paused && !audio.ended) continue;
 
             pool.cursor = (index + 1) % pool.voices.length;
+            const cachedSrc = this.safariSoundUrls[src] || src;
+            if (audio.dataset.soundSrc !== cachedSrc) {
+                audio.dataset.soundSrc = cachedSrc;
+                audio.src = cachedSrc;
+                audio.load();
+            }
             audio.play().catch(() => {});
             return;
         }
