@@ -14,6 +14,7 @@ const HIGH_SCORE_KEY = 'hitSquirrelMiniGameHighScore';
 const LEGACY_HIGH_SCORE_KEY = 'hitSquirrelHighScore';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edgios|android).)*safari/i.test(navigator.userAgent);
+const USE_SMALL_FRAMES = IS_SAFARI || window.matchMedia('(pointer: coarse)').matches;
 const STAR_COUNT = IS_SAFARI ? 4 : 7;
 const MAX_ACTIVE_SFX = 8;
 const DEBUG_FLAGS = Object.assign(
@@ -27,6 +28,12 @@ const ANIMATIONS = {
     aftershock: ['aftershock-1', 'aftershock-2', 'aftershock-3', 'aftershock-4'],
     punch: ['punch-1', 'punch-2', 'punch-3', 'punch-4']
 };
+const SQUIRREL_FRAMES = [
+    'staticSquirrel',
+    ...ANIMATIONS.idle,
+    ...ANIMATIONS.aftershock,
+    ...ANIMATIONS.punch
+];
 
 const Atlas = {
     size: 2048,
@@ -37,6 +44,7 @@ const Atlas = {
     ],
     frames: null,
     images: [],
+    frameImages: {},
     async load() {
         if (!this.frames) {
             const response = await fetch('assets/atlases/atlas.json');
@@ -51,6 +59,20 @@ const Atlas = {
             img.onerror = reject;
             img.src = src;
         })));
+        if (USE_SMALL_FRAMES) {
+            await Promise.all(SQUIRREL_FRAMES.map(name => new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = async () => {
+                    try {
+                        if (img.decode) await img.decode();
+                    } catch {}
+                    this.frameImages[name] = img;
+                    resolve();
+                };
+                img.onerror = reject;
+                img.src = `assets/frames/${name}.webp`;
+            })));
+        }
     },
     _cropFrame(name) {
         const frame = this.frames[name];
@@ -226,20 +248,35 @@ class AudioManager {
     }
 
     preload() {
-        if (this.spriteAssets) return;
-        this.spriteAssets = Promise.all([
-            fetch('assets/sounds/sprites.json').then(response => response.json()),
-            fetch('assets/sounds/sprites.m4a').then(response => response.arrayBuffer())
-        ]);
+        if (!this.spriteAssets) {
+            this.spriteAssets = Promise.all([
+                fetch('assets/sounds/sprites.json').then(response => response.json()),
+                fetch('assets/sounds/sprites.m4a').then(response => response.arrayBuffer())
+            ]);
+        }
+
+        this._ensureContext();
+        if (this.ctx) this._loadSprite();
+    }
+
+    _ensureContext() {
+        if (this.ctx) return;
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+
+        try {
+            this.ctx = new Ctx();
+        } catch {
+            this.ctx = null;
+        }
     }
 
     unlock() {
         if (this.unlocked) return;
         this.unlocked = true;
 
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (Ctx) {
-            this.ctx = new Ctx();
+        this.preload();
+        if (this.ctx) {
             this.ctx.resume().catch(() => {});
             this._loadSprite();
         }
@@ -250,7 +287,7 @@ class AudioManager {
     _loadSprite() {
         if (this.spriteReady) return this.spriteReady;
 
-        this.preload();
+        if (!this.spriteAssets || !this.ctx) return Promise.resolve();
         this.spriteReady = this.spriteAssets.then(([meta, data]) => {
             return this._decode(data).then(buffer => [meta, buffer]);
         }).then(([meta, buffer]) => {
@@ -432,7 +469,7 @@ class SquirrelPlayer {
     }
 
     _setFrame(name) {
-        if (IS_SAFARI) {
+        if (USE_SMALL_FRAMES) {
             const url = `assets/frames/${name}.webp`;
             if (this._frameUrl !== url) {
                 this._frameUrl = url;
