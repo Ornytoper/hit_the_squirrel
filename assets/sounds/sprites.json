@@ -1,0 +1,104 @@
+[
+ {
+  "name": "squirrelMiniGameShow_1",
+  "group": "show",
+  "start": 0.0,
+  "dur": 0.2393
+ },
+ {
+  "name": "squirrelMiniGameShow_2",
+  "group": "show",
+  "start": 0.2393,
+  "dur": 0.2193
+ },
+ {
+  "name": "squirrelMiniGameShow_3",
+  "group": "show",
+  "start": 0.4586,
+  "dur": 0.2894
+ },
+ {
+  "name": "squirrelMiniGameHide_1",
+  "group": "hide",
+  "start": 0.748,
+  "dur": 0.2086
+ },
+ {
+  "name": "squirrelMiniGameHide_2",
+  "group": "hide",
+  "start": 0.9566,
+  "dur": 0.2088
+ },
+ {
+  "name": "squirrelMiniGameHide_3",
+  "group": "hide",
+  "start": 1.1654,
+  "dur": 0.1783
+ },
+ {
+  "name": "squirrelMiniGameHammerHitTheTarget_1",
+  "group": "hitTarget",
+  "start": 1.3437,
+  "dur": 0.4002
+ },
+ {
+  "name": "squirrelMiniGameHammerHitTheTarget_2",
+  "group": "hitTarget",
+  "start": 1.7439,
+  "dur": 0.4212
+ },
+ {
+  "name": "squirrelMiniGameHammerHitsquirellScream_1",
+  "group": "scream",
+  "start": 2.165,
+  "dur": 0.2026
+ },
+ {
+  "name": "squirrelMiniGameHammerHitsquirellScream_2",
+  "group": "scream",
+  "start": 2.3676,
+  "dur": 0.2168
+ },
+ {
+  "name": "squirrelMiniGameHammerHitsquirellScream_3",
+  "group": "scream",
+  "start": 2.5844,
+  "dur": 0.2136
+ },
+ {
+  "name": "squirrelMiniGameHammerMiss_1",
+  "group": "miss",
+  "start": 2.798,
+  "dur": 0.4112
+ },
+ {
+  "name": "squirrelMiniGameHammerMiss_2",
+  "group": "miss",
+  "start": 3.2092,
+  "dur": 0.3557
+ },
+ {
+  "name": "squirrelMiniGameHammerMiss_3",
+  "group": "miss",
+  "start": 3.5649,
+  "dur": 0.3502
+ },
+ {
+  "name": "squirrelMiniGameStars_1",
+  "group": "stars",
+  "start": 3.9151,
+  "dur": 0.7317
+ },
+ {
+  "name": "squirrelMiniGameStars_2",
+  "group": "stars",
+  "start": 4.6468,
+  "dur": 0.7739
+ },
+ {
+  "name": "squirrelMiniGameStars_3",
+  "group": "stars",
+  "start": 5.4207,
+  "dur": 0.7304
+ }
+]

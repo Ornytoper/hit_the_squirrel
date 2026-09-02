@@ -15,6 +15,11 @@ const LEGACY_HIGH_SCORE_KEY = 'hitSquirrelHighScore';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edgios|android).)*safari/i.test(navigator.userAgent);
 const STAR_COUNT = IS_SAFARI ? 4 : 7;
+const DEBUG_FLAGS = Object.assign(
+    { sound: true, stars: true, squirrel: true, hammer: true },
+    Object.fromEntries(new URLSearchParams(location.search).entries())
+);
+const FLAG_ON = v => v !== '0' && v !== 'false' && v !== false;
 
 const ANIMATIONS = {
     idle: ['idle-1', 'idle-2', 'idle-3', 'idle-4'],
@@ -201,6 +206,8 @@ class AudioManager {
         this.unlocked = false;
         this.ctx = null;
         this.buffers = {};
+        this.spriteMap = null;
+        this.spriteReady = null;
         this.ext = this._pickExt();
     }
 
@@ -225,13 +232,30 @@ class AudioManager {
         if (Ctx) {
             this.ctx = new Ctx();
             this.ctx.resume().catch(() => {});
+            this._loadSprite();
         }
 
         this.playMusic();
     }
 
+    _loadSprite() {
+        if (this.spriteReady) return this.spriteReady;
+        this.spriteReady = Promise.all([
+            fetch('assets/sounds/sprites.json').then(r => r.json()),
+            fetch('assets/sounds/sprites.m4a')
+                .then(r => r.arrayBuffer())
+                .then(data => this._decode(data))
+        ]).then(([meta, buffer]) => {
+            this.spriteMap = {};
+            meta.forEach(m => { this.spriteMap[m.name] = m; });
+            this.buffers.__sprite = buffer;
+        }).catch(() => {});
+        return this.spriteReady;
+    }
+
     play(name) {
         if (!this.unlocked) return;
+        if (!FLAG_ON(DEBUG_FLAGS.sound)) return;
         const entry = SOUNDS[name];
         if (!entry) return;
 
@@ -250,11 +274,29 @@ class AudioManager {
         }
 
         this.lastIndex[name] = index;
-        this._playSound(this._src(srcs[index]));
+        const stem = srcs[index].split('/').pop().replace(/\.ogg$/i, '');
+        this._playSpriteClip(stem);
+    }
+
+    _playSpriteClip(stem) {
+        if (!this.ctx) return;
+        const play = () => {
+            const meta = this.spriteMap && this.spriteMap[stem];
+            const buffer = this.buffers.__sprite;
+            if (!meta || !buffer || this.ctx.state === 'closed') return;
+            if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+            const node = this.ctx.createBufferSource();
+            node.buffer = buffer;
+            node.connect(this.ctx.destination);
+            node.start(0, meta.start, meta.dur);
+        };
+        if (this.spriteMap) play();
+        else this._loadSprite().then(play);
     }
 
     playMusic() {
         if (!this.unlocked) return;
+        if (!FLAG_ON(DEBUG_FLAGS.sound)) return;
 
         if (this.musicAudio) {
             this.musicAudio.play().catch(() => {});
@@ -272,47 +314,6 @@ class AudioManager {
         if (!this.musicAudio) return;
         this.musicAudio.pause();
         this.musicAudio = null;
-    }
-
-    _playSound(src) {
-        if (this.ctx) {
-            this._playBuffer(src);
-            return;
-        }
-
-        const audio = new Audio(src);
-        audio.volume = 1;
-        audio.playsInline = true;
-        audio.play().catch(() => {});
-        audio.addEventListener('ended', () => {
-            audio.src = '';
-        }, { once: true });
-    }
-
-    _playBuffer(src) {
-        const start = buffer => {
-            if (!this.ctx || this.ctx.state === 'closed') return;
-            if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-            const node = this.ctx.createBufferSource();
-            node.buffer = buffer;
-            node.connect(this.ctx.destination);
-            node.start(0);
-        };
-
-        const cached = this.buffers[src];
-        if (cached) {
-            start(cached);
-            return;
-        }
-
-        fetch(src)
-            .then(response => response.arrayBuffer())
-            .then(data => this._decode(data))
-            .then(buffer => {
-                this.buffers[src] = buffer;
-                start(buffer);
-            })
-            .catch(() => {});
     }
 
     _decode(data) {
@@ -363,6 +364,10 @@ class SquirrelPlayer {
     playAnimation(frames, yoyo, onComplete) {
         this._stopAnim();
         if (!frames || frames.length === 0) return;
+        if (!FLAG_ON(DEBUG_FLAGS.squirrel)) {
+            if (onComplete) onComplete();
+            return;
+        }
 
         const sequence = yoyo
             ? frames.concat(frames.slice().reverse())
@@ -503,6 +508,7 @@ class HammerPlayer {
     }
 
     playHitAtStagePosition(x, y) {
+        if (!FLAG_ON(DEBUG_FLAGS.hammer)) return;
         this._stopAnim();
 
         const strikeX = x + (this.element.offsetWidth + HAMMER_HIT_OFFSET_X);
@@ -529,6 +535,7 @@ class HammerPlayer {
 
     _spawnStars(x, y) {
         if (!this.ctx) return;
+        if (!FLAG_ON(DEBUG_FLAGS.stars)) return;
 
         for (let i = 0; i < STAR_COUNT; i++) {
             const angle = (Math.PI * 2 * i) / 7 + Math.random() * 0.4;
