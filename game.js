@@ -13,6 +13,9 @@ const HAMMER_HIT_OFFSET_X = 50.0;
 const HIGH_SCORE_KEY = 'hitSquirrelMiniGameHighScore';
 const LEGACY_HIGH_SCORE_KEY = 'hitSquirrelHighScore';
 
+const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edgios|android).)*safari/i.test(navigator.userAgent);
+const STAR_COUNT = IS_SAFARI ? 4 : 7;
+
 const ANIMATIONS = {
     idle: ['idle-1', 'idle-2', 'idle-3', 'idle-4'],
     aftershock: ['aftershock-1', 'aftershock-2', 'aftershock-3', 'aftershock-4'],
@@ -342,7 +345,7 @@ class SquirrelPlayer {
 
     playStatic() {
         this._stopAnim();
-        Atlas.paint(this.sprite, 'staticSquirrel', 'fill');
+        this._setFrame('staticSquirrel');
     }
 
     playIdle(yoyo, onComplete) {
@@ -360,7 +363,6 @@ class SquirrelPlayer {
     playAnimation(frames, yoyo, onComplete) {
         this._stopAnim();
         if (!frames || frames.length === 0) return;
-        if (!this._frameCache) this._frameCache = {};
 
         const sequence = yoyo
             ? frames.concat(frames.slice().reverse())
@@ -372,30 +374,7 @@ class SquirrelPlayer {
 
         const showFrame = () => {
             if (cancelled) return;
-            const key = sequence[frameIndex];
-            let style = this._frameCache[key];
-            if (!style) {
-                const frame = Atlas.frames[key];
-                if (frame) {
-                    const cw = this.sprite.clientWidth;
-                    const ch = this.sprite.clientHeight;
-                    const sx = cw / frame.w;
-                    const sy = ch / frame.h;
-                    style = {
-                        size: `${Atlas.size * sx}px ${Atlas.size * sy}px`,
-                        pos: `${-frame.x * sx}px ${-frame.y * sy}px`,
-                        url: Atlas.urls[frame.atlas]
-                    };
-                    this._frameCache[key] = style;
-                }
-            }
-            if (style) {
-                if (this.sprite.style.backgroundImage !== `url("${style.url}")`) {
-                    this.sprite.style.backgroundImage = `url("${style.url}")`;
-                }
-                this.sprite.style.backgroundSize = style.size;
-                this.sprite.style.backgroundPosition = style.pos;
-            }
+            this._setFrame(sequence[frameIndex]);
             frameIndex += 1;
             timeoutId = setTimeout(() => {
                 if (cancelled) return;
@@ -413,6 +392,41 @@ class SquirrelPlayer {
             cancelled = true;
             clearTimeout(timeoutId);
         };
+    }
+
+    _setFrame(name) {
+        if (IS_SAFARI) {
+            const url = `assets/frames/${name}.webp`;
+            if (this._frameUrl !== url) {
+                this._frameUrl = url;
+                this.sprite.style.backgroundImage = `url("${url}")`;
+                this.sprite.style.backgroundSize = 'cover';
+                this.sprite.style.backgroundPosition = 'center';
+            }
+            return;
+        }
+
+        if (!this._frameCache) this._frameCache = {};
+        let style = this._frameCache[name];
+        if (!style) {
+            const frame = Atlas.frames[name];
+            if (!frame) return;
+            const cw = this.sprite.clientWidth;
+            const ch = this.sprite.clientHeight;
+            const sx = cw / frame.w;
+            const sy = ch / frame.h;
+            style = {
+                size: `${Atlas.size * sx}px ${Atlas.size * sy}px`,
+                pos: `${-frame.x * sx}px ${-frame.y * sy}px`,
+                url: Atlas.urls[frame.atlas]
+            };
+            this._frameCache[name] = style;
+        }
+        if (this.sprite.style.backgroundImage !== `url("${style.url}")`) {
+            this.sprite.style.backgroundImage = `url("${style.url}")`;
+        }
+        this.sprite.style.backgroundSize = style.size;
+        this.sprite.style.backgroundPosition = style.pos;
     }
 
     move(isUp, onComplete) {
@@ -516,7 +530,7 @@ class HammerPlayer {
     _spawnStars(x, y) {
         if (!this.ctx) return;
 
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < STAR_COUNT; i++) {
             const angle = (Math.PI * 2 * i) / 7 + Math.random() * 0.4;
             const distance = 40 + Math.random() * 50;
             this.stars.push({
@@ -553,8 +567,6 @@ class HammerPlayer {
                 ctx.rotate(rot);
                 ctx.globalAlpha = 1 - age;
                 ctx.fillStyle = '#fff8c8';
-                ctx.shadowColor = '#ffe56a';
-                ctx.shadowBlur = 3;
                 ctx.beginPath();
                 const pts = [[0,-0.5],[0.11,-0.15],[0.48,-0.15],[0.18,0.07],[0.29,0.41],[0,0.2],[-0.29,0.41],[-0.18,0.07],[-0.48,-0.15],[-0.11,-0.15]];
                 ctx.moveTo(pts[0][0]*s, pts[0][1]*s);
