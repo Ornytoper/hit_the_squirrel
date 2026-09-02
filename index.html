@@ -3,23 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Ударь белку</title>
-    <link rel="stylesheet" href="style.css?v=restore-hole-mask">
+    <title>Помоги белке</title>
+    <link rel="stylesheet" href="style.css?v=no-idle-jitter">
 </head>
 <body>
     <div id="game-container">
         <div id="stage">
             <div id="background"></div>
             <div id="score-panel">
-                <div class="score-row">
-                    <span class="score-label">Текущие очки:</span>
-                    <span id="score-value">0</span>
+                <div class="score-row stash-row">
+                    <span class="stash-coin-icon" aria-hidden="true"></span>
+                    <span class="score-label">Запас</span>
+                    <div class="stash-track">
+                        <div id="stash-fill"></div>
+                    </div>
+                    <span id="stash-value">0/12</span>
                 </div>
                 <div class="score-row">
-                    <span class="score-label">Рекорд:</span>
+                    <span class="score-label">Время</span>
+                    <span id="timer-value">0:25</span>
+                </div>
+                <div class="score-row">
+                    <span class="score-label">Рекорд</span>
                     <span id="high-score-value">0</span>
                 </div>
             </div>
+            <div id="combo-banner" hidden>Серия ×2</div>
             <div id="holes-container">
                 <div class="hole" data-index="0">
                     <div class="hole-image"></div>
@@ -40,10 +49,19 @@
                     </div>
                 </div>
             </div>
-            <div id="hammer"></div>
+            <div id="fx-layer"></div>
             <div id="particles"><canvas id="particles-canvas"></canvas></div>
+            <div id="overlay">
+                <div class="overlay-card">
+                    <div class="brand-mark">belbet.</div>
+                    <h1 id="overlay-title">Помоги белке</h1>
+                    <p id="overlay-text">Отдай монету — она спрячет удачу</p>
+                    <div id="overlay-stats" hidden></div>
+                    <button type="button" id="play-button">ИГРАТЬ</button>
+                </div>
+            </div>
         </div>
     </div>
-    <script src="game.js?v=mobile-predecode"></script>
+    <script src="game.js?v=no-idle-jitter"></script>
 </body>
 </html>
