@@ -228,11 +228,15 @@ class AudioManager {
         if (this.unlocked) return;
         this.unlocked = true;
 
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (Ctx) {
-            this.ctx = new Ctx();
-            this.ctx.resume().catch(() => {});
+        if (IS_SAFARI) {
             this._loadSprite();
+        } else {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (Ctx) {
+                this.ctx = new Ctx();
+                this.ctx.resume().catch(() => {});
+                this._loadSprite();
+            }
         }
 
         this.playMusic();
@@ -240,6 +244,21 @@ class AudioManager {
 
     _loadSprite() {
         if (this.spriteReady) return this.spriteReady;
+
+        if (IS_SAFARI) {
+            this._safariAudio = new Audio('assets/sounds/sprites.m4a');
+            this._safariAudio.preload = 'auto';
+            this._safariAudio.playsInline = true;
+            this._safariAudio.load();
+            this.spriteReady = fetch('assets/sounds/sprites.json')
+                .then(r => r.json())
+                .then(meta => {
+                    this.spriteMap = {};
+                    meta.forEach(m => { this.spriteMap[m.name] = m; });
+                }).catch(() => {});
+            return this.spriteReady;
+        }
+
         this.spriteReady = Promise.all([
             fetch('assets/sounds/sprites.json').then(r => r.json()),
             fetch('assets/sounds/sprites.m4a')
@@ -275,7 +294,23 @@ class AudioManager {
 
         this.lastIndex[name] = index;
         const stem = srcs[index].split('/').pop().replace(/\.ogg$/i, '');
-        this._playSpriteClip(stem);
+
+        if (IS_SAFARI) {
+            this._playSafariHtml(stem);
+        } else {
+            this._playSpriteClip(stem);
+        }
+    }
+
+    _playSafariHtml(stem) {
+        const meta = this.spriteMap && this.spriteMap[stem];
+        const audio = this._safariAudio;
+        if (!meta || !audio) return;
+
+        audio.currentTime = meta.start;
+        audio.play().catch(() => {});
+        clearTimeout(this._safariStop);
+        this._safariStop = setTimeout(() => audio.pause(), meta.dur * 1000);
     }
 
     _playSpriteClip(stem) {
@@ -536,6 +571,7 @@ class HammerPlayer {
     _spawnStars(x, y) {
         if (!this.ctx) return;
         if (!FLAG_ON(DEBUG_FLAGS.stars)) return;
+        if (this.stars.length > 0) return;
 
         for (let i = 0; i < STAR_COUNT; i++) {
             const angle = (Math.PI * 2 * i) / 7 + Math.random() * 0.4;
