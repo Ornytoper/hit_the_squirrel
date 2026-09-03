@@ -919,16 +919,24 @@ class HelpTheSquirrelGame {
         });
     }
 
+    _viewportSize() {
+        return {
+            w: window.innerWidth,
+            h: window.innerHeight
+        };
+    }
+
     _fitStage() {
-        const isPortrait = window.innerHeight > window.innerWidth;
+        const { w: viewW, h: viewH } = this._viewportSize();
+        const isPortrait = viewH > viewW;
         this.isPortrait = isPortrait;
         document.body.classList.toggle('portrait', isPortrait);
         document.body.classList.toggle('landscape', !isPortrait);
 
         if (isPortrait) {
             this.stageWidth = PORTRAIT_STAGE.width;
-            this.stageHeight = Math.round(PORTRAIT_STAGE.width * window.innerHeight / window.innerWidth);
-            const scale = window.innerWidth / this.stageWidth;
+            this.stageHeight = Math.round(PORTRAIT_STAGE.width * viewH / viewW);
+            const scale = viewW / this.stageWidth;
             this.stage.style.width = `${this.stageWidth}px`;
             this.stage.style.height = `${this.stageHeight}px`;
             this.stage.style.transform = `scale(${scale})`;
@@ -938,8 +946,8 @@ class HelpTheSquirrelGame {
             this.stage.style.width = `${this.stageWidth}px`;
             this.stage.style.height = `${this.stageHeight}px`;
             const scale = Math.min(
-                window.innerWidth / this.stageWidth,
-                window.innerHeight / this.stageHeight
+                viewW / this.stageWidth,
+                viewH / this.stageHeight
             );
             this.stage.style.transform = `scale(${scale})`;
         }
@@ -974,8 +982,30 @@ class HelpTheSquirrelGame {
             setTimeout(fit, 200);
         });
         if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', fitDebounced);
+            window.visualViewport.addEventListener('resize', () => {
+                if (Math.abs(window.visualViewport.scale - 1) > 0.02) return;
+                fitDebounced();
+            });
         }
+
+        const blockZoom = (event) => event.preventDefault();
+        ['gesturestart', 'gesturechange', 'gestureend'].forEach(type => {
+            document.addEventListener(type, blockZoom, { passive: false });
+        });
+        document.addEventListener('dblclick', blockZoom, { passive: false });
+        document.addEventListener('touchmove', (event) => {
+            if (event.touches.length > 1) event.preventDefault();
+        }, { passive: false });
+
+        let lastTap = { t: 0, x: 0, y: 0 };
+        document.addEventListener('touchend', (event) => {
+            const touch = event.changedTouches && event.changedTouches[0];
+            if (!touch) return;
+            const now = Date.now();
+            const sameSpot = Math.hypot(touch.clientX - lastTap.x, touch.clientY - lastTap.y) < 28;
+            if (now - lastTap.t < 350 && sameSpot) event.preventDefault();
+            lastTap = { t: now, x: touch.clientX, y: touch.clientY };
+        }, { passive: false });
 
         const pointFromEvent = (event) => {
             const point = event.changedTouches ? event.changedTouches[0] : event;
